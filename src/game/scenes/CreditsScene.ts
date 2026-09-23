@@ -4,7 +4,8 @@ import { theme } from '../theme';
 import type { Scene, SceneContext } from './Scene';
 
 const LINES = [
-  'CITY DEFENSE',
+  'SKYDEF',
+  'LAST LINE OF DEFENSE',
   '',
   'A 2D island city under fire.',
   'Switch batteries on the lower deck',

@@ -1,4 +1,4 @@
-import { Container, Graphics, Text } from 'pixi.js';
+import { Container, Graphics, Rectangle, Text } from 'pixi.js';
 
 import { theme } from '../theme';
 import type { Scene, SceneContext } from './Scene';
@@ -14,25 +14,25 @@ export class MenuScene implements Scene {
 
   private readonly backdrop = new Graphics();
   private readonly title = new Text({
-    text: 'CITY DEFENSE',
+    text: 'SKYDEF',
     style: {
       fontFamily: theme.fonts.title,
       fontSize: 72,
       fill: theme.colors.menuTitle,
-      letterSpacing: 8,
+      letterSpacing: 10,
     },
   });
   private readonly subtitle = new Text({
-    text: 'HOLD THE ISLAND',
+    text: 'LAST LINE OF DEFENSE',
     style: {
       fontFamily: theme.fonts.mono,
       fontSize: 16,
       fill: theme.colors.menuIdle,
-      letterSpacing: 6,
+      letterSpacing: 4,
     },
   });
   private readonly hint = new Text({
-    text: '↑ ↓  SELECT     ENTER / SPACE  CONFIRM',
+    text: 'CLICK / TAP  OR  ↑ ↓  ENTER / SPACE',
     style: {
       fontFamily: theme.fonts.mono,
       fontSize: 13,
@@ -40,15 +40,36 @@ export class MenuScene implements Scene {
       letterSpacing: 2,
     },
   });
+  private readonly optionHits: Graphics[] = [];
   private readonly optionTexts: Text[] = [];
   private readonly cursor = new Graphics();
   private selected = 0;
   private pulse = 0;
+  private pendingTarget: string | null = null;
 
   constructor() {
+    this.backdrop.eventMode = 'none';
+    this.title.eventMode = 'none';
+    this.subtitle.eventMode = 'none';
+    this.hint.eventMode = 'none';
+    this.cursor.eventMode = 'none';
     this.view.addChild(this.backdrop, this.title, this.subtitle, this.hint, this.cursor);
 
-    for (const option of OPTIONS) {
+    OPTIONS.forEach((option, index) => {
+      const hit = new Graphics();
+      hit.eventMode = 'static';
+      hit.cursor = 'pointer';
+      hit.on('pointerover', () => {
+        this.selected = index;
+        this.refreshSelection();
+      });
+      hit.on('pointerdown', () => {
+        this.selected = index;
+        this.pendingTarget = option.target;
+      });
+      this.optionHits.push(hit);
+      this.view.addChild(hit);
+
       const text = new Text({
         text: option.label,
         style: {
@@ -58,18 +79,22 @@ export class MenuScene implements Scene {
           letterSpacing: 4,
         },
       });
+      text.eventMode = 'none';
       this.optionTexts.push(text);
       this.view.addChild(text);
-    }
+    });
   }
 
   enter(): void {
     this.selected = 0;
     this.pulse = 0;
+    this.pendingTarget = null;
     this.refreshSelection();
   }
 
-  exit(): void {}
+  exit(): void {
+    this.pendingTarget = null;
+  }
 
   update(deltaMs: number, context: SceneContext): void {
     const { input } = context;
@@ -82,6 +107,22 @@ export class MenuScene implements Scene {
     if (input.wasPressed('ArrowDown', 'KeyS')) {
       this.selected = (this.selected + 1) % OPTIONS.length;
       this.refreshSelection();
+    }
+
+    if (this.pendingTarget) {
+      const target = this.pendingTarget;
+      this.pendingTarget = null;
+      context.goto(target);
+      return;
+    }
+
+    if (input.pointer.clicked) {
+      const tapped = this.hitOption(input.pointer.x, input.pointer.y);
+      if (tapped !== null) {
+        this.selected = tapped;
+        context.goto(OPTIONS[tapped].target);
+        return;
+      }
     }
 
     if (input.wasPressed('Enter', 'Space')) {
@@ -104,9 +145,17 @@ export class MenuScene implements Scene {
     this.subtitle.position.set(width / 2, height * 0.28 + 52);
 
     const startY = height * 0.5;
+    const hitWidth = Math.min(420, width * 0.7);
+    const hitHeight = 72;
     this.optionTexts.forEach((text, index) => {
       text.anchor.set(0.5, 0.5);
-      text.position.set(width / 2, startY + index * 56);
+      text.position.set(width / 2, startY + index * 70);
+
+      const hit = this.optionHits[index];
+      hit.clear();
+      hit.rect(-hitWidth / 2, -hitHeight / 2, hitWidth, hitHeight).fill({ color: 0xffffff, alpha: 0.001 });
+      hit.position.set(width / 2, startY + index * 70);
+      hit.hitArea = new Rectangle(-hitWidth / 2, -hitHeight / 2, hitWidth, hitHeight);
     });
 
     this.hint.anchor.set(0.5, 0.5);
@@ -117,6 +166,16 @@ export class MenuScene implements Scene {
 
   destroy(): void {
     this.view.destroy({ children: true });
+  }
+
+  private hitOption(x: number, y: number): number | null {
+    for (let index = 0; index < this.optionHits.length; index += 1) {
+      const bounds = this.optionHits[index].getBounds();
+      if (x >= bounds.x && x <= bounds.x + bounds.width && y >= bounds.y && y <= bounds.y + bounds.height) {
+        return index;
+      }
+    }
+    return null;
   }
 
   private refreshSelection(): void {
