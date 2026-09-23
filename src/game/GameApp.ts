@@ -27,6 +27,7 @@ export class GameApp {
     if (!host) {
       throw new Error('Missing #app mount point');
     }
+    host.replaceChildren();
     host.appendChild(this.app.canvas);
     this.app.canvas.tabIndex = 0;
     this.app.canvas.focus();
@@ -56,5 +57,11 @@ export class GameApp {
       this.scenes.update(ticker.deltaMS, this.app.screen.width, this.app.screen.height);
       this.input.endFrame();
     });
+  }
+
+  destroy(): void {
+    this.input.detach(window);
+    this.scenes.destroy();
+    this.app.destroy(true);
   }
 }

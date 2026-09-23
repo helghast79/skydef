@@ -1,10 +1,12 @@
 import { Container, Graphics } from 'pixi.js';
 
-import { theme } from '../theme';
-
-type Battery = { x: number; y: number };
+import type { BatteryOrigins } from '../world/City';
+import type { Threat } from '../threats/Threat';
+import type { WeaponId } from './weapons';
+import { WEAPON_IDS, WEAPONS } from './weapons';
 
 type Interceptor = {
+  weapon: WeaponId;
   x: number;
   y: number;
   vx: number;
@@ -16,6 +18,7 @@ type Interceptor = {
 };
 
 type Burst = {
+  weapon: WeaponId;
   x: number;
   y: number;
   age: number;
@@ -24,19 +27,40 @@ type Burst = {
 
 export class DefenseSystem {
   readonly view = new Container();
-  ammo = theme.defense.startingAmmo;
+  selected: WeaponId = 'mid';
+  ammo: Record<WeaponId, number> = {
+    upper: WEAPONS.upper.startAmmo,
+    mid: WEAPONS.mid.startAmmo,
+    short: WEAPONS.short.startAmmo,
+    drone: WEAPONS.drone.startAmmo,
+  };
 
-  private batteries: Battery[] = [];
+  private origins: BatteryOrigins = {
+    upper: { x: 0, y: 0 },
+    mid: { x: 0, y: 0 },
+    short: { x: 0, y: 0 },
+    drone: { x: 0, y: 0 },
+  };
   private readonly turrets = new Graphics();
   private interceptors: Interceptor[] = [];
   private bursts: Burst[] = [];
+  private regenMs: Record<WeaponId, number> = {
+    upper: 0,
+    mid: 0,
+    short: 0,
+    drone: 0,
+  };
 
   constructor() {
     this.view.addChild(this.turrets);
   }
 
-  reset(points: Battery[]): void {
-    this.ammo = theme.defense.startingAmmo;
+  reset(origins: BatteryOrigins): void {
+    for (const id of WEAPON_IDS) {
+      this.ammo[id] = WEAPONS[id].startAmmo;
+      this.regenMs[id] = 0;
+    }
+    this.selected = 'mid';
     for (const interceptor of this.interceptors) {
       interceptor.graphic.destroy();
     }
@@ -45,62 +69,84 @@ export class DefenseSystem {
     }
     this.interceptors = [];
     this.bursts = [];
-    this.layout(points);
+    this.layout(origins);
   }
 
-  layout(points: Battery[]): void {
-    this.batteries = points;
+  layout(origins: BatteryOrigins): void {
+    this.origins = origins;
     this.drawTurrets();
   }
 
-  tryFire(x: number, y: number): boolean {
-    if (this.ammo <= 0 || this.batteries.length === 0) {
+  select(weapon: WeaponId): void {
+    this.selected = weapon;
+  }
+
+  tryFire(x: number, y: number, threats: Threat[]): boolean {
+    const weapon = this.selected;
+    if (this.ammo[weapon] <= 0) {
       return false;
     }
 
-    const origin = this.batteries.reduce((closest, battery) => {
-      const dist = Math.hypot(battery.x - x, battery.y - y);
-      const closestDist = Math.hypot(closest.x - x, closest.y - y);
-      return dist < closestDist ? battery : closest;
-    });
+    let destX = x;
+    let destY = y;
+    if (weapon === 'upper') {
+      const inbound = this.nearestSpaceBallistic(x, y, threats);
+      if (inbound) {
+        destX = inbound.x;
+        destY = inbound.y;
+      }
+    }
 
-    const dx = x - origin.x;
-    const dy = y - origin.y;
+    const origin = this.origins[weapon];
+    const dx = destX - origin.x;
+    const dy = destY - origin.y;
     const length = Math.hypot(dx, dy) || 1;
-    const speed = theme.defense.interceptorSpeed;
+    const speed = WEAPONS[weapon].speed;
 
     const graphic = new Graphics();
-    const interceptor: Interceptor = {
+    this.view.addChild(graphic);
+    this.interceptors.push({
+      weapon,
       x: origin.x,
       y: origin.y,
       vx: (dx / length) * speed,
       vy: (dy / length) * speed,
-      destX: x,
-      destY: y,
+      destX,
+      destY,
       alive: true,
       graphic,
-    };
-    this.view.addChild(graphic);
-    this.interceptors.push(interceptor);
-    this.ammo -= 1;
+    });
+    this.ammo[weapon] -= 1;
     return true;
   }
 
   update(deltaMs: number): void {
     const dt = deltaMs / 1000;
 
+    for (const id of WEAPON_IDS) {
+      if (this.ammo[id] >= WEAPONS[id].maxAmmo) {
+        this.regenMs[id] = 0;
+        continue;
+      }
+      this.regenMs[id] += deltaMs;
+      if (this.regenMs[id] >= WEAPONS[id].regenMs) {
+        this.ammo[id] = Math.min(WEAPONS[id].maxAmmo, this.ammo[id] + WEAPONS[id].regenAmount);
+        this.regenMs[id] = 0;
+      }
+    }
+
     for (const interceptor of this.interceptors) {
       interceptor.x += interceptor.vx * dt;
       interceptor.y += interceptor.vy * dt;
       interceptor.graphic.clear();
-      interceptor.graphic.circle(0, 0, 3).fill({ color: theme.colors.interceptor });
+      interceptor.graphic.circle(0, 0, interceptor.weapon === 'upper' ? 4 : 3).fill({
+        color: WEAPONS[interceptor.weapon].color,
+      });
       interceptor.graphic.position.set(interceptor.x, interceptor.y);
 
-      const reached =
-        Math.hypot(interceptor.x - interceptor.destX, interceptor.y - interceptor.destY) < 12;
-      if (reached) {
+      if (Math.hypot(interceptor.x - interceptor.destX, interceptor.y - interceptor.destY) < 12) {
         interceptor.alive = false;
-        this.spawnBurst(interceptor.x, interceptor.y);
+        this.spawnBurst(interceptor.weapon, interceptor.x, interceptor.y);
       }
     }
 
@@ -118,7 +164,7 @@ export class DefenseSystem {
       burst.graphic.clear();
       burst.graphic.circle(0, 0, radius).stroke({
         width: 2,
-        color: theme.colors.burst,
+        color: WEAPONS[burst.weapon].color,
         alpha: Math.max(0, 1 - burst.age * 2.2),
       });
       burst.graphic.position.set(burst.x, burst.y);
@@ -133,12 +179,12 @@ export class DefenseSystem {
     });
   }
 
-  consumeHits(threats: { x: number; y: number; radius: number; alive: boolean }[]): number {
+  consumeHits(threats: Threat[], closeY: number): number {
     let downed = 0;
     for (const burst of this.bursts) {
-      const reach = 8 + burst.age * 90;
+      const reach = WEAPONS[burst.weapon].blastRadius + burst.age * 40;
       for (const threat of threats) {
-        if (!threat.alive) {
+        if (!threat.alive || !this.canEngage(burst.weapon, threat, closeY)) {
           continue;
         }
         if (Math.hypot(threat.x - burst.x, threat.y - burst.y) < reach + threat.radius) {
@@ -150,17 +196,52 @@ export class DefenseSystem {
     return downed;
   }
 
-  private spawnBurst(x: number, y: number): void {
+  private canEngage(weapon: WeaponId, threat: Threat, closeY: number): boolean {
+    if (weapon === 'upper') {
+      return threat.kind === 'ballistic' && threat.phase === 'space';
+    }
+    if (weapon === 'drone') {
+      return threat.kind === 'drone' && threat.phase === 'air';
+    }
+    if (weapon === 'mid') {
+      return (
+        (threat.kind === 'ballistic' || threat.kind === 'cruise') &&
+        threat.phase === 'air' &&
+        threat.y < closeY
+      );
+    }
+    return threat.phase === 'air' && threat.y >= closeY;
+  }
+
+  private nearestSpaceBallistic(x: number, y: number, threats: Threat[]): Threat | null {
+    let best: Threat | null = null;
+    let bestDist = Infinity;
+    for (const threat of threats) {
+      if (threat.kind !== 'ballistic' || threat.phase !== 'space' || !threat.alive) {
+        continue;
+      }
+      const dist = Math.hypot(threat.x - x, threat.y - y);
+      if (dist < bestDist) {
+        best = threat;
+        bestDist = dist;
+      }
+    }
+    return best;
+  }
+
+  private spawnBurst(weapon: WeaponId, x: number, y: number): void {
     const graphic = new Graphics();
     this.view.addChild(graphic);
-    this.bursts.push({ x, y, age: 0, graphic });
+    this.bursts.push({ weapon, x, y, age: 0, graphic });
   }
 
   private drawTurrets(): void {
     this.turrets.clear();
-    for (const battery of this.batteries) {
-      this.turrets.rect(battery.x - 8, battery.y - 6, 16, 6).fill({ color: 0x2a3228 });
-      this.turrets.rect(battery.x - 3, battery.y - 16, 6, 12).fill({ color: 0x4a5644 });
+    for (const id of WEAPON_IDS) {
+      const battery = this.origins[id];
+      const color = WEAPONS[id].color;
+      this.turrets.rect(battery.x - 7, battery.y - 5, 14, 5).fill({ color: 0x1c221c });
+      this.turrets.rect(battery.x - 2, battery.y - 14, 4, 11).fill({ color });
     }
   }
 }
