@@ -14,7 +14,7 @@ export class MenuScene implements Scene {
 
   private readonly backdrop = new Graphics();
   private readonly title = new Text({
-    text: 'SKYDEF',
+    text: 'SKYLINE',
     style: {
       fontFamily: theme.fonts.title,
       fontSize: 72,

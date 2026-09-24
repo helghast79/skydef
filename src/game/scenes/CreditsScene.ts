@@ -4,13 +4,12 @@ import { theme } from '../theme';
 import type { Scene, SceneContext } from './Scene';
 
 const LINES = [
-  'SKYDEF',
+  'SKYLINE',
   'LAST LINE OF DEFENSE',
   '',
   'A 2D island city under fire.',
-  'Switch batteries on the lower deck',
-  'to stop ballistic, cruise and drone',
-  'strikes before they reach the island.',
+  'Long-range, short-range and drone',
+  'interceptors hold the skyline.',
   '',
   'Scaffold build — systems and',
   'balance still to come.',
