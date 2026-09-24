@@ -1,7 +1,8 @@
-import { Container, Graphics, Text } from 'pixi.js';
+import { Container, Graphics, Sprite, Text } from 'pixi.js';
 
 import type { WeaponId } from '../defense/weapons';
 import { WEAPON_IDS, WEAPONS } from '../defense/weapons';
+import { iconTexture } from '../icons';
 import { theme } from '../theme';
 
 type Slot = { id: WeaponId; x: number; y: number; width: number; height: number };
@@ -12,37 +13,43 @@ export class InfoBar {
   readonly view = new Container();
   private readonly panel = new Graphics();
   private readonly slotsGfx = new Graphics();
-  private readonly status = new Text({
-    text: '',
-    style: {
-      fontFamily: HUD_FONT,
-      fontSize: 13,
-      fill: theme.colors.menuActive,
-    },
-  });
   private readonly hits = new Text({
     text: '',
     style: {
       fontFamily: HUD_FONT,
-      fontSize: 13,
+      fontSize: 12,
       fill: 0xd6e2ea,
     },
   });
-  private readonly slotLabels: Record<WeaponId, Text>;
+  private readonly icons: Record<WeaponId, Sprite> = {
+    long: new Sprite(),
+    short: new Sprite(),
+    drone: new Sprite(),
+  };
+  private readonly ammoText: Record<WeaponId, Text> = {
+    long: this.makeAmmoText(),
+    short: this.makeAmmoText(),
+    drone: this.makeAmmoText(),
+  };
   private slots: Slot[] = [];
   private bar = { x: 0, y: 0, width: 0, height: 0 };
+  private iconsReady = false;
 
   constructor() {
-    this.slotLabels = {
-      upper: this.makeSlotText(),
-      mid: this.makeSlotText(),
-      short: this.makeSlotText(),
-      drone: this.makeSlotText(),
-    };
-    this.view.addChild(this.panel, this.slotsGfx, this.status, this.hits);
+    this.view.addChild(this.panel, this.slotsGfx, this.hits);
     for (const id of WEAPON_IDS) {
-      this.view.addChild(this.slotLabels[id]);
+      this.icons[id].anchor.set(0.5, 0.5);
+      this.view.addChild(this.icons[id], this.ammoText[id]);
     }
+  }
+
+  bindIcons(): void {
+    for (const id of WEAPON_IDS) {
+      this.icons[id].texture = iconTexture(id);
+      this.icons[id].width = 28;
+      this.icons[id].height = 28;
+    }
+    this.iconsReady = true;
   }
 
   resize(width: number, height: number): void {
@@ -55,20 +62,21 @@ export class InfoBar {
     this.panel.rect(0, 0, width, barHeight).fill({ color: theme.colors.hudBg });
     this.panel.rect(0, 0, width, 2).fill({ color: theme.colors.hudLine });
 
-    this.status.anchor.set(0, 0.5);
-    this.status.position.set(16, 14);
-
     this.hits.anchor.set(1, 0.5);
-    this.hits.position.set(width - 16, 14);
+    this.hits.position.set(width - 16, barHeight / 2);
 
-    const pad = 12;
-    const slotY = 28;
-    const slotH = 60;
-    const gap = 8;
-    const slotW = (width - pad * 2 - gap * 3) / 4;
+    const slotCount = WEAPON_IDS.length;
+    const pad = 16;
+    const gap = 10;
+    const slotW = 88;
+    const slotH = 52;
+    const rowWidth = slotCount * slotW + (slotCount - 1) * gap;
+    const startX = Math.max(pad, (width - rowWidth) / 2 - 40);
+    const slotY = (barHeight - slotH) / 2;
+
     this.slots = WEAPON_IDS.map((id, index) => ({
       id,
-      x: pad + index * (slotW + gap),
+      x: startX + index * (slotW + gap),
       y: slotY,
       width: slotW,
       height: slotH,
@@ -94,40 +102,41 @@ export class InfoBar {
     ammo: Record<WeaponId, number>;
     downed: number;
     hits: number;
-    status: string;
   }): void {
-    this.status.text = state.status;
-    this.hits.text = `DOWNED ${state.downed}   CITY HITS ${state.hits}   ESC MENU`;
+    this.hits.text = `${state.downed}  ·  ${state.hits}  ·  ESC`;
 
     this.slotsGfx.clear();
     for (const slot of this.slots) {
       const active = slot.id === state.selected;
       const def = WEAPONS[slot.id];
-      this.slotsGfx.roundRect(slot.x, slot.y, slot.width, slot.height, 4).fill({
+      this.slotsGfx.roundRect(slot.x, slot.y, slot.width, slot.height, 6).fill({
         color: active ? 0x1b2618 : 0x12181e,
       });
-      this.slotsGfx.roundRect(slot.x, slot.y, slot.width, slot.height, 4).stroke({
+      this.slotsGfx.roundRect(slot.x, slot.y, slot.width, slot.height, 6).stroke({
         width: active ? 2 : 1,
         color: active ? def.color : 0x2c3a44,
       });
 
-      const label = this.slotLabels[slot.id];
-      label.text = `${def.label}   ${state.ammo[slot.id]}/${def.maxAmmo}\n${def.hint}`;
-      label.style.fill = active ? def.color : 0xa8b4bc;
-      label.anchor.set(0.5, 0.5);
-      label.position.set(slot.x + slot.width / 2, slot.y + slot.height / 2);
+      const icon = this.icons[slot.id];
+      icon.visible = this.iconsReady;
+      icon.position.set(slot.x + 24, slot.y + slot.height / 2);
+      icon.alpha = active ? 1 : 0.7;
+
+      const ammo = this.ammoText[slot.id];
+      ammo.text = `${state.ammo[slot.id]}`;
+      ammo.style.fill = active ? def.color : 0xa8b4bc;
+      ammo.anchor.set(0.5, 0.5);
+      ammo.position.set(slot.x + slot.width - 22, slot.y + slot.height / 2);
     }
   }
 
-  private makeSlotText(): Text {
+  private makeAmmoText(): Text {
     return new Text({
-      text: '',
+      text: '0',
       style: {
         fontFamily: HUD_FONT,
-        fontSize: 13,
+        fontSize: 18,
         fill: 0xa8b4bc,
-        align: 'center',
-        lineHeight: 18,
       },
     });
   }

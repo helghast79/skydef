@@ -41,6 +41,14 @@ export class SceneManager {
     this.current?.resize(width, height);
   }
 
+  debugState(): unknown {
+    const scene = this.current;
+    if (scene && 'debugState' in scene && typeof scene.debugState === 'function') {
+      return scene.debugState();
+    }
+    return { scene: scene?.name ?? null };
+  }
+
   destroy(): void {
     for (const scene of this.scenes.values()) {
       scene.destroy();

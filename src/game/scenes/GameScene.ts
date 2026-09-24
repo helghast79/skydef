@@ -1,4 +1,4 @@
-import { Container, Graphics, Text } from 'pixi.js';
+import { Container, Graphics } from 'pixi.js';
 
 import type { WeaponId } from '../defense/weapons';
 import { DefenseSystem } from '../defense/DefenseSystem';
@@ -12,14 +12,12 @@ import { Sky } from '../world/Sky';
 import type { Scene, SceneContext } from './Scene';
 
 const WEAPON_KEYS: Record<string, WeaponId> = {
-  Digit1: 'upper',
-  Digit2: 'mid',
-  Digit3: 'short',
-  Digit4: 'drone',
-  '1': 'upper',
-  '2': 'mid',
-  '3': 'short',
-  '4': 'drone',
+  Digit1: 'long',
+  Digit2: 'short',
+  Digit3: 'drone',
+  '1': 'long',
+  '2': 'short',
+  '3': 'drone',
 };
 
 export class GameScene implements Scene {
@@ -28,15 +26,6 @@ export class GameScene implements Scene {
 
   private readonly sky = new Sky();
   private readonly clouds = new CloudLayer();
-  private readonly spaceTrack = new Graphics();
-  private readonly spaceLabel = new Text({
-    text: 'SPACE TRACK',
-    style: {
-      fontFamily: '"Courier New", monospace',
-      fontSize: 11,
-      fill: 0xff8a7a,
-    },
-  });
   private readonly rangeGuide = new Graphics();
   private readonly city = new City();
   private readonly defenses = new DefenseSystem();
@@ -54,11 +43,10 @@ export class GameScene implements Scene {
   private height = 0;
 
   constructor() {
+    this.info.bindIcons();
     this.view.addChild(
       this.sky.view,
       this.clouds.view,
-      this.spaceTrack,
-      this.spaceLabel,
       this.rangeGuide,
       this.city.view,
       this.threatLayer,
@@ -135,7 +123,7 @@ export class GameScene implements Scene {
           this.defenses.select(weapon);
         }
       } else if (pointer.y < this.city.bounds.infoTop) {
-        this.defenses.tryFire(pointer.x, pointer.y, this.threats);
+        this.defenses.tryFire(pointer.x, pointer.y);
       }
     }
 
@@ -164,6 +152,28 @@ export class GameScene implements Scene {
     this.rebuild(width, height, false);
   }
 
+  debugState(): unknown {
+    return {
+      scene: this.name,
+      elapsed: Math.round(this.elapsed),
+      alert: this.alert,
+      alertBlend: Number(this.alertBlend.toFixed(2)),
+      width: this.width,
+      height: this.height,
+      ammo: { ...this.defenses.ammo },
+      selected: this.defenses.selected,
+      downed: this.downed,
+      hits: this.hits,
+      threats: this.threats.map((threat) => ({
+        kind: threat.kind,
+        phase: threat.phase,
+        x: Math.round(threat.x),
+        y: Math.round(threat.y),
+        hp: threat.hp,
+      })),
+    };
+  }
+
   destroy(): void {
     this.clearThreats();
     this.view.destroy({ children: true });
@@ -187,13 +197,6 @@ export class GameScene implements Scene {
   }
 
   private drawOverlays(width: number): void {
-    const trackH = theme.layout.spaceTrackHeight;
-    this.spaceTrack.clear();
-    this.spaceTrack.rect(0, 0, width, trackH).fill({ color: theme.colors.spaceTrack, alpha: 0.72 });
-    this.spaceTrack.rect(0, trackH - 1, width, 1).fill({ color: 0x8a3030, alpha: 0.85 });
-    this.spaceLabel.anchor.set(0, 0.5);
-    this.spaceLabel.position.set(12, trackH / 2);
-
     const closeY = this.city.bounds.infoTop * theme.layout.closeRangeRatio;
     this.rangeGuide.clear();
     this.rangeGuide.rect(0, closeY, width, 1).fill({ color: 0xffffff, alpha: 0.08 });
@@ -205,7 +208,6 @@ export class GameScene implements Scene {
       ammo: this.defenses.ammo,
       downed: this.downed,
       hits: this.hits,
-      status: this.alert ? 'SIREN ACTIVE — INCOMING' : 'CITY AT PEACE',
     });
   }
 

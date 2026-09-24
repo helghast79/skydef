@@ -33,16 +33,14 @@ export const theme = {
     threatCruise: 0x4a4a38,
     interceptor: 0xffe08a,
     burst: 0xffc14a,
-    spaceTrack: 0x0a1018,
     warning: 0xff4a3a,
   },
   layout: {
-    infoBarHeight: 100,
+    infoBarHeight: 68,
     cityWidthRatio: 0.6,
     cityHeightRatio: 0.24,
     buildingScale: 0.8,
-    spaceTrackHeight: 36,
-    peacefulMs: 2800,
+    peacefulMs: 1600,
     closeRangeRatio: 0.62,
   },
 } as const;

@@ -20,8 +20,7 @@ export class City {
   readonly siren = new Siren();
   readonly buildings: Building[] = [];
   batteryOrigins: BatteryOrigins = {
-    upper: { x: 0, y: 0 },
-    mid: { x: 0, y: 0 },
+    long: { x: 0, y: 0 },
     short: { x: 0, y: 0 },
     drone: { x: 0, y: 0 },
   };
@@ -148,9 +147,8 @@ export class City {
     const byX = [...this.buildings].sort((a, b) => a.x - b.x);
     const roof = (building: Building) => ({ x: building.x + building.width / 2, y: building.y });
 
-    this.batteryOrigins.upper = roof(byHeight[0]);
-    this.batteryOrigins.mid = roof(byX[0]);
+    this.batteryOrigins.long = roof(byHeight[0]);
     this.batteryOrigins.short = roof(byX[byX.length - 1]);
-    this.batteryOrigins.drone = roof(byX[Math.floor(byX.length / 2)]);
+    this.batteryOrigins.drone = roof(byX[0]);
   }
 }

@@ -1,14 +1,14 @@
 import { Threat } from './Threat';
 
 export class ThreatSpawner {
-  private ballisticIn = 1800;
-  private cruiseIn = 900;
-  private droneIn = 1400;
+  private ballisticIn = 0;
+  private cruiseIn = 400;
+  private droneIn = 800;
 
   reset(): void {
-    this.ballisticIn = 1800;
-    this.cruiseIn = 900;
-    this.droneIn = 1400;
+    this.ballisticIn = 0;
+    this.cruiseIn = 400;
+    this.droneIn = 800;
   }
 
   update(
@@ -22,38 +22,35 @@ export class ThreatSpawner {
     const spawned: Threat[] = [];
 
     if (this.ballisticIn <= 0) {
-      this.ballisticIn = 7000 + Math.random() * 4000;
+      this.ballisticIn = 8000 + Math.random() * 4000;
       spawned.push(this.spawnBallistic(bounds));
     }
 
     if (this.cruiseIn <= 0) {
-      this.cruiseIn = 3600 + Math.random() * 2400;
+      this.cruiseIn = 4800 + Math.random() * 2800;
       spawned.push(this.spawnCruise(bounds));
     }
 
     if (this.droneIn <= 0) {
-      this.droneIn = 4200 + Math.random() * 2800;
+      this.droneIn = 5200 + Math.random() * 2800;
       spawned.push(this.spawnDrone(bounds));
     }
 
     return spawned;
   }
 
-  private spawnBallistic(bounds: {
-    left: number;
-    right: number;
-    rooftop: number;
-  }): Threat {
+  private spawnBallistic(bounds: { left: number; right: number; rooftop: number }): Threat {
     const targetX = bounds.left + Math.random() * (bounds.right - bounds.left);
     return new Threat({
       kind: 'ballistic',
-      phase: 'space',
+      phase: 'alert',
       startX: targetX,
-      startY: 22,
+      startY: 58,
       targetX,
       targetY: bounds.rooftop,
-      warnMs: 5600,
-      durationMs: 2200,
+      warnMs: 3000,
+      durationMs: 9800,
+      hitPoints: 3,
     });
   }
 
@@ -79,7 +76,7 @@ export class ThreatSpawner {
       targetY: bounds.rooftop,
       controlX,
       controlY,
-      durationMs: 8200 + Math.random() * 1400,
+      durationMs: 16000 + Math.random() * 2400,
     });
   }
 
@@ -92,8 +89,8 @@ export class ThreatSpawner {
   }): Threat {
     const fromLeft = Math.random() > 0.5;
     const startX = fromLeft ? -24 : bounds.width + 24;
-    const midDown = bounds.height * (0.5 + Math.random() * 0.22);
-    const startY = Math.min(midDown, bounds.rooftop - 40);
+    const midDown = bounds.height * (0.48 + Math.random() * 0.18);
+    const startY = Math.min(midDown, bounds.rooftop - 50);
     const targetX = bounds.left + Math.random() * (bounds.right - bounds.left);
 
     return new Threat({

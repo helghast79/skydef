@@ -1,11 +1,10 @@
-export const WEAPON_IDS = ['upper', 'mid', 'short', 'drone'] as const;
+export const WEAPON_IDS = ['long', 'short', 'drone'] as const;
 
 export type WeaponId = (typeof WEAPON_IDS)[number];
 
 export type WeaponDef = {
   id: WeaponId;
   label: string;
-  hint: string;
   color: number;
   speed: number;
   blastRadius: number;
@@ -16,52 +15,37 @@ export type WeaponDef = {
 };
 
 export const WEAPONS: Record<WeaponId, WeaponDef> = {
-  upper: {
-    id: 'upper',
-    label: 'UPPER',
-    hint: 'SPACE BALLISTIC',
+  long: {
+    id: 'long',
+    label: 'LONG',
     color: 0x7ec8ff,
-    speed: 820,
-    blastRadius: 38,
-    startAmmo: 2,
-    maxAmmo: 4,
-    regenMs: 8000,
-    regenAmount: 1,
-  },
-  mid: {
-    id: 'mid',
-    label: 'MID',
-    hint: 'BALLISTIC / CRUISE',
-    color: 0xffe08a,
-    speed: 640,
-    blastRadius: 30,
+    speed: 520,
+    blastRadius: 36,
     startAmmo: 3,
-    maxAmmo: 8,
-    regenMs: 5200,
+    maxAmmo: 6,
+    regenMs: 5600,
     regenAmount: 1,
   },
   short: {
     id: 'short',
     label: 'SHORT',
-    hint: 'CLOSE-IN',
     color: 0xff8a4a,
-    speed: 720,
+    speed: 680,
     blastRadius: 22,
-    startAmmo: 6,
-    maxAmmo: 14,
-    regenMs: 3600,
-    regenAmount: 2,
+    startAmmo: 5,
+    maxAmmo: 10,
+    regenMs: 3800,
+    regenAmount: 1,
   },
   drone: {
     id: 'drone',
     label: 'DRONE',
-    hint: 'UAV INTERCEPT',
     color: 0x7dff9a,
-    speed: 460,
-    blastRadius: 20,
-    startAmmo: 2,
+    speed: 400,
+    blastRadius: 18,
+    startAmmo: 3,
     maxAmmo: 6,
-    regenMs: 6400,
+    regenMs: 6200,
     regenAmount: 1,
   },
 };
