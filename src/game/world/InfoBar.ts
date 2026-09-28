@@ -32,6 +32,7 @@ export class InfoBar {
   private slots: Slot[] = [];
   private bar = { x: 0, y: 0, width: 0, height: 0 };
   private iconsReady = false;
+  private lastHud = '';
 
   constructor() {
     this.view.addChild(this.panel, this.slotsGfx, this.hits);
@@ -51,6 +52,7 @@ export class InfoBar {
   }
 
   resize(width: number, height: number): void {
+    this.lastHud = '';
     const barHeight = theme.layout.infoBarHeight;
     const y = height - barHeight;
     this.bar = { x: 0, y, width, height: barHeight };
@@ -101,6 +103,12 @@ export class InfoBar {
     downed: number;
     hits: number;
   }): void {
+    const signature = `${state.selected}:${state.ammo.missile}:${state.ammo.jammer}:${state.downed}:${state.hits}:${this.iconsReady}`;
+    if (signature === this.lastHud) {
+      return;
+    }
+    this.lastHud = signature;
+
     this.hits.text = `${state.downed}  ·  ${state.hits}  ·  ESC`;
 
     this.slotsGfx.clear();

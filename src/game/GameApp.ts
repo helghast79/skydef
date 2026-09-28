@@ -11,8 +11,6 @@ export class GameApp {
   private readonly app = new Application();
   private readonly input = new Input();
   private readonly scenes = new SceneManager(this.input);
-  private lastTick = performance.now();
-  private pumpId = 0;
 
   async start(): Promise<void> {
     await document.fonts.ready;
@@ -58,53 +56,15 @@ export class GameApp {
       this.scenes.resize(width, height);
     });
 
-    this.lastTick = performance.now();
-    this.app.ticker.minFPS = 1;
-    this.app.ticker.add(() => {
-      this.advance();
+    this.app.ticker.add((ticker) => {
+      this.scenes.update(ticker.deltaMS, this.app.screen.width, this.app.screen.height);
+      this.input.endFrame();
     });
-    this.pumpId = window.setInterval(() => {
-      this.advance();
-      this.app.render();
-    }, 50);
-
-    const debug = window as Window & {
-      __skyline?: () => unknown;
-      __skylineAdvance?: (deltaMs: number) => unknown;
-      __skylineClick?: (x: number, y: number) => unknown;
-    };
-    debug.__skyline = () => this.scenes.debugState();
-    debug.__skylineAdvance = (deltaMs: number) => {
-      this.scenes.update(deltaMs, this.app.screen.width, this.app.screen.height);
-      this.input.endFrame();
-      this.app.render();
-      return this.scenes.debugState();
-    };
-    debug.__skylineClick = (x: number, y: number) => {
-      this.input.markClick(x, y);
-      this.scenes.update(16, this.app.screen.width, this.app.screen.height);
-      this.input.endFrame();
-      this.app.render();
-      return this.scenes.debugState();
-    };
   }
 
   destroy(): void {
-    window.clearInterval(this.pumpId);
     this.input.detach(window);
     this.scenes.destroy();
     this.app.destroy(true);
-  }
-
-  private advance(): void {
-    const now = performance.now();
-    const raw = now - this.lastTick;
-    if (raw < 8) {
-      return;
-    }
-    this.lastTick = now;
-    const deltaMs = Math.min(raw, 100);
-    this.scenes.update(deltaMs, this.app.screen.width, this.app.screen.height);
-    this.input.endFrame();
   }
 }
