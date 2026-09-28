@@ -1,7 +1,5 @@
 import { Container, Graphics } from 'pixi.js';
 
-import type { WeaponId } from '../defense/weapons';
-import { WEAPON_IDS } from '../defense/weapons';
 import { theme } from '../theme';
 import { Siren } from './Siren';
 
@@ -13,17 +11,10 @@ export type Building = {
   color: number;
 };
 
-export type BatteryOrigins = Record<WeaponId, { x: number; y: number }>;
-
 export class City {
   readonly view = new Container();
   readonly siren = new Siren();
   readonly buildings: Building[] = [];
-  batteryOrigins: BatteryOrigins = {
-    long: { x: 0, y: 0 },
-    short: { x: 0, y: 0 },
-    drone: { x: 0, y: 0 },
-  };
 
   private readonly ground = new Graphics();
   private readonly skyline = new Graphics();
@@ -62,7 +53,6 @@ export class City {
 
     this.drawGround(width, infoTop, left, right, baseY);
     this.drawBuildings(left, right, baseY - cityHeight, baseY);
-    this.placeBatteries();
   }
 
   update(deltaMs: number): void {
@@ -131,24 +121,5 @@ export class City {
     if (tallest) {
       this.siren.place(tallest.x + tallest.width / 2, tallest.y);
     }
-  }
-
-  private placeBatteries(): void {
-    const fallback = { x: (this.left + this.right) / 2, y: this.rooftop };
-    for (const id of WEAPON_IDS) {
-      this.batteryOrigins[id] = { ...fallback };
-    }
-
-    if (this.buildings.length === 0) {
-      return;
-    }
-
-    const byHeight = [...this.buildings].sort((a, b) => b.height - a.height);
-    const byX = [...this.buildings].sort((a, b) => a.x - b.x);
-    const roof = (building: Building) => ({ x: building.x + building.width / 2, y: building.y });
-
-    this.batteryOrigins.long = roof(byHeight[0]);
-    this.batteryOrigins.short = roof(byX[byX.length - 1]);
-    this.batteryOrigins.drone = roof(byX[0]);
   }
 }

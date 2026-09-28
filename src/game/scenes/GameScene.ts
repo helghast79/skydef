@@ -1,4 +1,4 @@
-import { Container, Graphics } from 'pixi.js';
+import { Container } from 'pixi.js';
 
 import type { WeaponId } from '../defense/weapons';
 import { DefenseSystem } from '../defense/DefenseSystem';
@@ -12,12 +12,10 @@ import { Sky } from '../world/Sky';
 import type { Scene, SceneContext } from './Scene';
 
 const WEAPON_KEYS: Record<string, WeaponId> = {
-  Digit1: 'long',
-  Digit2: 'short',
-  Digit3: 'drone',
-  '1': 'long',
-  '2': 'short',
-  '3': 'drone',
+  Digit1: 'missile',
+  Digit2: 'jammer',
+  '1': 'missile',
+  '2': 'jammer',
 };
 
 export class GameScene implements Scene {
@@ -26,7 +24,6 @@ export class GameScene implements Scene {
 
   private readonly sky = new Sky();
   private readonly clouds = new CloudLayer();
-  private readonly rangeGuide = new Graphics();
   private readonly city = new City();
   private readonly defenses = new DefenseSystem();
   private readonly info = new InfoBar();
@@ -47,7 +44,6 @@ export class GameScene implements Scene {
     this.view.addChild(
       this.sky.view,
       this.clouds.view,
-      this.rangeGuide,
       this.city.view,
       this.threatLayer,
       this.defenses.view,
@@ -131,8 +127,7 @@ export class GameScene implements Scene {
       threat.update(deltaMs);
     }
 
-    const closeY = this.city.bounds.infoTop * theme.layout.closeRangeRatio;
-    this.downed += this.defenses.consumeHits(this.threats, closeY);
+    this.downed += this.defenses.consumeHits(this.threats, deltaMs);
 
     this.threats = this.threats.filter((threat) => {
       if (threat.alive) {
@@ -187,19 +182,10 @@ export class GameScene implements Scene {
     this.clouds.rebuild(width, height * 0.55);
     this.city.rebuild(width, height);
     if (resetDefense) {
-      this.defenses.reset(this.city.batteryOrigins);
-    } else {
-      this.defenses.layout(this.city.batteryOrigins);
+      this.defenses.reset();
     }
     this.info.resize(width, height);
-    this.drawOverlays(width);
     this.syncHud();
-  }
-
-  private drawOverlays(width: number): void {
-    const closeY = this.city.bounds.infoTop * theme.layout.closeRangeRatio;
-    this.rangeGuide.clear();
-    this.rangeGuide.rect(0, closeY, width, 1).fill({ color: 0xffffff, alpha: 0.08 });
   }
 
   private syncHud(): void {

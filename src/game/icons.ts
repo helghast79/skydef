@@ -2,14 +2,12 @@ import { Assets, Texture } from 'pixi.js';
 
 import type { WeaponId } from './defense/weapons';
 import { WEAPON_IDS } from './defense/weapons';
-import droneUrl from '../assets/icons/weapon-drone.svg?url';
-import longUrl from '../assets/icons/weapon-long.svg?url';
-import shortUrl from '../assets/icons/weapon-short.svg?url';
+import jammerUrl from '../assets/icons/weapon-jammer.svg?url';
+import missileUrl from '../assets/icons/weapon-missile.svg?url';
 
 const ICON_URLS: Record<WeaponId, string> = {
-  long: longUrl,
-  short: shortUrl,
-  drone: droneUrl,
+  missile: missileUrl,
+  jammer: jammerUrl,
 };
 
 const textures = {} as Record<WeaponId, Texture>;

@@ -1,4 +1,4 @@
-export const WEAPON_IDS = ['long', 'short', 'drone'] as const;
+export const WEAPON_IDS = ['missile', 'jammer'] as const;
 
 export type WeaponId = (typeof WEAPON_IDS)[number];
 
@@ -6,46 +6,35 @@ export type WeaponDef = {
   id: WeaponId;
   label: string;
   color: number;
-  speed: number;
-  blastRadius: number;
   startAmmo: number;
   maxAmmo: number;
   regenMs: number;
   regenAmount: number;
+  duration: number;
+  radius: number;
 };
 
 export const WEAPONS: Record<WeaponId, WeaponDef> = {
-  long: {
-    id: 'long',
-    label: 'LONG',
-    color: 0x7ec8ff,
-    speed: 520,
-    blastRadius: 36,
-    startAmmo: 3,
-    maxAmmo: 6,
-    regenMs: 5600,
+  missile: {
+    id: 'missile',
+    label: 'MISSILE',
+    color: 0xff8a3a,
+    startAmmo: 8,
+    maxAmmo: 12,
+    regenMs: 2600,
     regenAmount: 1,
+    duration: 1.05,
+    radius: 108,
   },
-  short: {
-    id: 'short',
-    label: 'SHORT',
-    color: 0xff8a4a,
-    speed: 680,
-    blastRadius: 22,
-    startAmmo: 5,
-    maxAmmo: 10,
-    regenMs: 3800,
+  jammer: {
+    id: 'jammer',
+    label: 'JAMMER',
+    color: 0x4aa8ff,
+    startAmmo: 2,
+    maxAmmo: 4,
+    regenMs: 6800,
     regenAmount: 1,
-  },
-  drone: {
-    id: 'drone',
-    label: 'DRONE',
-    color: 0x7dff9a,
-    speed: 400,
-    blastRadius: 18,
-    startAmmo: 3,
-    maxAmmo: 6,
-    regenMs: 6200,
-    regenAmount: 1,
+    duration: 6,
+    radius: 92,
   },
 };

@@ -31,6 +31,7 @@ export class Threat {
   phase: ThreatPhase;
   hp: number;
   readonly maxHp: number;
+  private jammerDwell = 0;
 
   private readonly path = new Graphics();
   private readonly body = new Graphics();
@@ -68,7 +69,7 @@ export class Threat {
     this.controlY = options.controlY ?? Math.min(options.startY, options.targetY) - 80;
     this.warnMs = options.warnMs ?? 3000;
     this.durationMs = options.durationMs ?? 8000;
-    this.maxHp = options.hitPoints ?? (options.kind === 'ballistic' ? 3 : 1);
+    this.maxHp = options.hitPoints ?? 1;
     this.hp = this.maxHp;
     this.radius = this.kind === 'drone' ? 11 : this.kind === 'cruise' ? 9 : 9;
     this.fromLeft = options.startX < options.targetX;
@@ -89,6 +90,19 @@ export class Threat {
       return true;
     }
     return false;
+  }
+
+  dwellInJammer(inside: boolean, dt: number): boolean {
+    if (!this.alive || this.kind !== 'drone' || this.phase !== 'air' || !inside) {
+      this.jammerDwell = 0;
+      return false;
+    }
+    this.jammerDwell += dt;
+    if (this.jammerDwell < 2) {
+      return false;
+    }
+    this.alive = false;
+    return true;
   }
 
   update(deltaMs: number): void {
@@ -195,7 +209,6 @@ export class Threat {
       case 'ballistic':
         this.body.moveTo(0, -12).lineTo(4, 9).lineTo(-4, 9).fill({ color: theme.colors.threatBallistic });
         this.body.rect(-1.5, 9, 3, 8).fill({ color: 0xffaa66, alpha: 0.85 });
-        this.drawHp();
         break;
       case 'cruise':
         this.body.rect(-14, -3, 26, 6).fill({ color: theme.colors.threatCruise });
@@ -216,13 +229,13 @@ export class Threat {
     this.body.circle(0, 0, 5).fill({ color: 0xffe08a, alpha: 0.85 + pulse * 0.15 });
     this.mark.alpha = 0.8 + pulse * 0.2;
 
-    const dash = 12;
+    const dash = 6;
     const endY = this.targetY - 10;
     for (let y = this.y + 36; y < endY; y += dash * 2) {
       this.path.moveTo(this.x, y);
       this.path.lineTo(this.x, Math.min(y + dash, endY));
     }
-    this.path.stroke({ width: 3, color: 0xffe08a, alpha: 0.55 + pulse * 0.3 });
+    this.path.stroke({ width: 1, color: 0xffe08a, alpha: 0.14 + pulse * 0.08 });
     this.path.moveTo(this.x - 14, this.targetY);
     this.path.lineTo(this.x, this.targetY - 14);
     this.path.lineTo(this.x + 14, this.targetY);
@@ -233,10 +246,10 @@ export class Threat {
   }
 
   private drawDashedCurve(): void {
-    const steps = 28;
+    const steps = 64;
     for (let i = 0; i < steps; i += 2) {
       const t0 = i / steps;
-      const t1 = Math.min(1, (i + 1) / steps);
+      const t1 = Math.min(1, (i + 0.7) / steps);
       this.path.moveTo(
         this.bezier(this.startX, this.controlX, this.targetX, t0),
         this.bezier(this.startY, this.controlY, this.targetY, t0),
@@ -246,17 +259,6 @@ export class Threat {
         this.bezier(this.startY, this.controlY, this.targetY, t1),
       );
     }
-    this.path.stroke({ width: 1.5, color: 0xffe08a, alpha: 0.45 });
-  }
-
-  private drawHp(): void {
-    const width = 16;
-    const start = -width / 2;
-    const step = width / this.maxHp;
-    for (let i = 0; i < this.maxHp; i += 1) {
-      this.body.rect(start + i * step, 16, step - 1, 3).fill({
-        color: i < this.hp ? 0xff6a4a : 0x3a2020,
-      });
-    }
+    this.path.stroke({ width: 1, color: 0xffe08a, alpha: 0.14 });
   }
 }

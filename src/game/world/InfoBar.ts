@@ -22,14 +22,12 @@ export class InfoBar {
     },
   });
   private readonly icons: Record<WeaponId, Sprite> = {
-    long: new Sprite(),
-    short: new Sprite(),
-    drone: new Sprite(),
+    missile: new Sprite(),
+    jammer: new Sprite(),
   };
   private readonly ammoText: Record<WeaponId, Text> = {
-    long: this.makeAmmoText(),
-    short: this.makeAmmoText(),
-    drone: this.makeAmmoText(),
+    missile: this.makeAmmoText(),
+    jammer: this.makeAmmoText(),
   };
   private slots: Slot[] = [];
   private bar = { x: 0, y: 0, width: 0, height: 0 };
@@ -71,7 +69,7 @@ export class InfoBar {
     const slotW = 88;
     const slotH = 52;
     const rowWidth = slotCount * slotW + (slotCount - 1) * gap;
-    const startX = Math.max(pad, (width - rowWidth) / 2 - 40);
+    const startX = Math.max(pad, (width - rowWidth) / 2);
     const slotY = (barHeight - slotH) / 2;
 
     this.slots = WEAPON_IDS.map((id, index) => ({

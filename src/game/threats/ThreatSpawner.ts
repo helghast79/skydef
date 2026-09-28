@@ -50,7 +50,7 @@ export class ThreatSpawner {
       targetY: bounds.rooftop,
       warnMs: 3000,
       durationMs: 9800,
-      hitPoints: 3,
+      hitPoints: 1,
     });
   }
 

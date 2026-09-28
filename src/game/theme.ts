@@ -41,6 +41,5 @@ export const theme = {
     cityHeightRatio: 0.24,
     buildingScale: 0.8,
     peacefulMs: 1600,
-    closeRangeRatio: 0.62,
   },
 } as const;
