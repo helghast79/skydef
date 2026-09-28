@@ -130,11 +130,11 @@ export class GameScene implements Scene {
     this.downed += this.defenses.consumeHits(this.threats, deltaMs);
 
     this.threats = this.threats.filter((threat) => {
-      if (threat.alive) {
-        return true;
-      }
-      if (threat.hitCity) {
+      if (threat.claimCityHit()) {
         this.hits += 1;
+      }
+      if (!threat.done) {
+        return true;
       }
       threat.view.destroy();
       return false;
@@ -165,6 +165,8 @@ export class GameScene implements Scene {
         x: Math.round(threat.x),
         y: Math.round(threat.y),
         hp: threat.hp,
+        done: threat.done,
+        alive: threat.alive,
       })),
     };
   }

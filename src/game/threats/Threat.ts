@@ -1,5 +1,6 @@
-import { Container, Graphics, Text } from 'pixi.js';
+import { Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
 
+import { missileTextures } from '../sprites';
 import { theme } from '../theme';
 
 export type ThreatKind = 'drone' | 'ballistic' | 'cruise';
@@ -28,6 +29,7 @@ export class Threat {
   radius: number;
   alive = true;
   hitCity = false;
+  done = false;
   phase: ThreatPhase;
   hp: number;
   readonly maxHp: number;
@@ -35,6 +37,12 @@ export class Threat {
 
   private readonly path = new Graphics();
   private readonly body = new Graphics();
+  private readonly art = new Sprite();
+  private exploding = false;
+  private cityClaimed = false;
+  private animTime = 0;
+  private flyingFrames: Texture[] = [];
+  private explosionFrames: Texture[] = [];
   private readonly mark = new Text({
     text: 'INCOMING',
     style: {
@@ -71,22 +79,37 @@ export class Threat {
     this.durationMs = options.durationMs ?? 8000;
     this.maxHp = options.hitPoints ?? 1;
     this.hp = this.maxHp;
-    this.radius = this.kind === 'drone' ? 11 : this.kind === 'cruise' ? 9 : 9;
+    this.radius = this.kind === 'drone' ? 11 : this.kind === 'cruise' ? 14 : 14;
     this.fromLeft = options.startX < options.targetX;
 
+    if (this.kind === 'ballistic' || this.kind === 'cruise') {
+      this.flyingFrames = missileTextures(this.kind, 'flying');
+      this.explosionFrames = missileTextures(this.kind, 'explosion');
+    }
+
     this.mark.anchor.set(0.5, 1.15);
-    this.view.addChild(this.path, this.body, this.mark);
+    this.art.anchor.set(0.5, 0.4);
+    this.art.visible = false;
+    this.view.addChild(this.path, this.body, this.art, this.mark);
     this.buildGraphics();
     this.view.position.set(this.x, this.y);
   }
 
+  claimCityHit(): boolean {
+    if (!this.hitCity || this.cityClaimed) {
+      return false;
+    }
+    this.cityClaimed = true;
+    return true;
+  }
+
   takeHit(): boolean {
-    if (!this.alive || this.phase !== 'air') {
+    if (!this.alive || this.phase !== 'air' || this.exploding) {
       return false;
     }
     this.hp -= 1;
     if (this.hp <= 0) {
-      this.alive = false;
+      this.kill(false);
       return true;
     }
     return false;
@@ -102,11 +125,16 @@ export class Threat {
       return false;
     }
     this.alive = false;
+    this.done = true;
     return true;
   }
 
   update(deltaMs: number): void {
     const dt = deltaMs / 1000;
+    if (this.exploding) {
+      this.playExplosion(dt);
+      return;
+    }
     this.age += dt;
 
     if (this.kind === 'ballistic' && this.phase === 'alert') {
@@ -135,8 +163,8 @@ export class Threat {
     if (this.kind === 'ballistic' && this.phase === 'air' && this.mark.visible) {
       this.mark.visible = false;
       this.path.clear();
-      this.body.alpha = 1;
-      this.buildBody();
+      this.body.visible = false;
+      this.showFlying();
     }
 
     if (this.kind === 'ballistic' && this.phase === 'alert') {
@@ -148,13 +176,14 @@ export class Threat {
 
     this.view.position.set(this.x, this.y);
     this.path.position.set(-this.x, -this.y);
-    if (!(this.kind === 'ballistic' && this.phase === 'alert')) {
+    if (this.art.visible) {
+      this.advanceFlying(dt);
+    } else if (!(this.kind === 'ballistic' && this.phase === 'alert')) {
       this.body.rotation = this.heading();
     }
 
     if (this.phase === 'air' && this.y >= this.targetY) {
-      this.alive = false;
-      this.hitCity = true;
+      this.kill(true);
     }
   }
 
@@ -212,6 +241,13 @@ export class Threat {
 
     if (this.kind === 'cruise') {
       this.drawDashedCurve();
+      this.showFlying();
+      return;
+    }
+
+    if (this.kind === 'ballistic') {
+      this.showFlying();
+      return;
     }
 
     this.buildBody();
@@ -219,6 +255,7 @@ export class Threat {
 
   private buildBody(): void {
     this.body.clear();
+    this.body.visible = true;
     switch (this.kind) {
       case 'drone':
         this.body.rect(-10, -3, 20, 6).fill({ color: theme.colors.threatDrone });
@@ -227,15 +264,87 @@ export class Threat {
         this.body.circle(0, 0, 2).fill({ color: 0xff4444 });
         break;
       case 'ballistic':
-        this.body.moveTo(0, -12).lineTo(4, 9).lineTo(-4, 9).fill({ color: theme.colors.threatBallistic });
-        this.body.rect(-1.5, 9, 3, 8).fill({ color: 0xffaa66, alpha: 0.85 });
+        this.body.moveTo(0, -16).lineTo(5, 12).lineTo(-5, 12).fill({ color: theme.colors.threatBallistic });
+        this.body.rect(-2, 12, 4, 10).fill({ color: 0xffaa66, alpha: 0.85 });
         break;
       case 'cruise':
-        this.body.rect(-14, -3, 26, 6).fill({ color: theme.colors.threatCruise });
-        this.body.moveTo(12, -3).lineTo(20, 0).lineTo(12, 3).fill({ color: 0x6a6a4a });
-        this.body.rect(-10, -6, 6, 3).fill({ color: 0x333328 });
+        this.body.rect(-16, -4, 28, 8).fill({ color: theme.colors.threatCruise });
+        this.body.moveTo(12, -4).lineTo(22, 0).lineTo(12, 4).fill({ color: 0x6a6a4a });
+        this.body.rect(-10, -7, 7, 3).fill({ color: 0x333328 });
         break;
     }
+  }
+
+  private showFlying(): void {
+    if (this.flyingFrames.length === 0) {
+      this.buildBody();
+      return;
+    }
+    this.body.visible = false;
+    this.art.visible = true;
+    this.art.blendMode = 'normal';
+    this.art.anchor.set(0.5, 0.42);
+    this.art.texture = this.flyingFrames[0];
+    const height = this.kind === 'ballistic' ? 86 : 78;
+    this.art.scale.set(height / this.flyingFrames[0].height);
+    this.art.rotation = this.heading() + Math.PI / 2;
+  }
+
+  private advanceFlying(dt: number): void {
+    if (this.flyingFrames.length === 0) {
+      return;
+    }
+    this.animTime += dt;
+    const index = Math.floor(this.animTime * 14) % this.flyingFrames.length;
+    const frame = this.flyingFrames[index];
+    if (this.art.texture !== frame) {
+      this.art.texture = frame;
+    }
+    this.art.rotation = this.heading() + Math.PI / 2;
+  }
+
+  private playExplosion(dt: number): void {
+    if (this.explosionFrames.length === 0) {
+      this.done = true;
+      return;
+    }
+    this.animTime += dt;
+    const index = Math.floor(this.animTime * 16);
+    if (index >= this.explosionFrames.length) {
+      this.exploding = false;
+      this.done = true;
+      this.art.visible = false;
+      return;
+    }
+    const frame = this.explosionFrames[index];
+    if (this.art.texture !== frame) {
+      this.art.texture = frame;
+    }
+  }
+
+  private kill(hitCity: boolean): void {
+    if (this.exploding || this.done) {
+      return;
+    }
+    this.alive = false;
+    if (hitCity) {
+      this.hitCity = true;
+    }
+    if (this.explosionFrames.length === 0) {
+      this.done = true;
+      return;
+    }
+    this.exploding = true;
+    this.animTime = 0;
+    this.path.visible = false;
+    this.body.visible = false;
+    this.mark.visible = false;
+    this.art.visible = true;
+    this.art.blendMode = 'add';
+    this.art.anchor.set(0.5);
+    this.art.rotation = 0;
+    this.art.texture = this.explosionFrames[0];
+    this.art.scale.set(140 / this.explosionFrames[0].height);
   }
 
   private drawBallisticAlert(): void {

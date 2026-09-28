@@ -3,6 +3,7 @@ import { Application } from 'pixi.js';
 import { loadIcons } from './icons';
 import { Input } from './Input';
 import { SceneManager } from './SceneManager';
+import { loadMissileSprites } from './sprites';
 import { CreditsScene } from './scenes/CreditsScene';
 import { GameScene } from './scenes/GameScene';
 import { MenuScene } from './scenes/MenuScene';
@@ -15,6 +16,7 @@ export class GameApp {
   async start(): Promise<void> {
     await document.fonts.ready;
     await loadIcons();
+    await loadMissileSprites();
 
     await this.app.init({
       resizeTo: window,
@@ -60,6 +62,26 @@ export class GameApp {
       this.scenes.update(ticker.deltaMS, this.app.screen.width, this.app.screen.height);
       this.input.endFrame();
     });
+
+    const debug = window as Window & {
+      __skyline?: () => unknown;
+      __skylineAdvance?: (deltaMs: number) => unknown;
+      __skylineClick?: (x: number, y: number) => unknown;
+    };
+    debug.__skyline = () => this.scenes.debugState();
+    debug.__skylineAdvance = (deltaMs: number) => {
+      this.scenes.update(deltaMs, this.app.screen.width, this.app.screen.height);
+      this.input.endFrame();
+      this.app.render();
+      return this.scenes.debugState();
+    };
+    debug.__skylineClick = (x: number, y: number) => {
+      this.input.markClick(x, y);
+      this.scenes.update(16, this.app.screen.width, this.app.screen.height);
+      this.input.endFrame();
+      this.app.render();
+      return this.scenes.debugState();
+    };
   }
 
   destroy(): void {
