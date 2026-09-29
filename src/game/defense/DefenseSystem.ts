@@ -88,6 +88,7 @@ export class DefenseSystem {
       effect.age += dt;
       if (effect.weapon === 'missile') {
         const fade = Math.max(0, 1 - effect.age / WEAPONS.missile.duration);
+        effect.graphic.position.set(effect.x, effect.y);
         effect.graphic.scale.set(this.radiusOf(effect));
         effect.graphic.alpha = fade;
       }

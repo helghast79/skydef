@@ -308,6 +308,7 @@ export class Threat {
       this.done = true;
       return;
     }
+    this.view.position.set(this.x, this.y);
     this.animTime += dt;
     const index = Math.floor(this.animTime * 16);
     if (index >= this.explosionFrames.length) {
@@ -334,6 +335,7 @@ export class Threat {
       this.done = true;
       return;
     }
+    const facing = this.heading() + Math.PI / 2;
     this.exploding = true;
     this.animTime = 0;
     this.path.visible = false;
@@ -342,9 +344,10 @@ export class Threat {
     this.art.visible = true;
     this.art.blendMode = 'add';
     this.art.anchor.set(0.5);
-    this.art.rotation = 0;
+    this.art.rotation = facing;
     this.art.texture = this.explosionFrames[0];
     this.art.scale.set(140 / this.explosionFrames[0].height);
+    this.view.position.set(this.x, this.y);
   }
 
   private drawBallisticAlert(): void {
