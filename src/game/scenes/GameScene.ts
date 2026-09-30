@@ -6,7 +6,6 @@ import { theme } from '../theme';
 import { Threat } from '../threats/Threat';
 import { ThreatSpawner } from '../threats/ThreatSpawner';
 import { City } from '../world/City';
-import { CloudLayer } from '../world/CloudLayer';
 import { InfoBar } from '../world/InfoBar';
 import { Sky } from '../world/Sky';
 import type { Scene, SceneContext } from './Scene';
@@ -16,7 +15,6 @@ export class GameScene implements Scene {
   readonly view = new Container();
 
   private readonly sky = new Sky();
-  private readonly clouds = new CloudLayer();
   private readonly city = new City();
   private readonly defenses = new DefenseSystem();
   private readonly info = new InfoBar();
@@ -70,7 +68,6 @@ export class GameScene implements Scene {
     this.overlay.visible = false;
     this.view.addChild(
       this.sky.view,
-      this.clouds.view,
       this.city.view,
       this.threatLayer,
       this.defenses.view,
@@ -89,7 +86,6 @@ export class GameScene implements Scene {
     this.overlay.visible = false;
     this.clearThreats();
     this.spawner.reset();
-    this.city.siren.setActive(false);
     this.rebuild(context.width, context.height, true);
   }
 
@@ -98,6 +94,8 @@ export class GameScene implements Scene {
   }
 
   update(deltaMs: number, context: SceneContext): void {
+    const dt = Math.min(deltaMs, 1000 / 30);
+
     if (context.input.wasPressed('Escape')) {
       context.goto('menu');
       return;
@@ -108,26 +106,23 @@ export class GameScene implements Scene {
       return;
     }
 
-    this.elapsed += deltaMs;
+    this.elapsed += dt;
 
     if (!this.alert && this.elapsed >= theme.layout.peacefulMs) {
       this.alert = true;
-      this.city.siren.setActive(true);
     }
 
     const blendTarget = this.alert ? 1 : 0;
     const previousBlend = this.alertBlend;
-    this.alertBlend += (blendTarget - this.alertBlend) * Math.min(1, deltaMs / 700);
-    if (Math.abs(this.alertBlend - previousBlend) > 0.01) {
+    this.alertBlend += (blendTarget - this.alertBlend) * Math.min(1, dt / 900);
+    if (Math.abs(this.alertBlend - previousBlend) > 0.002) {
       this.sky.setAlertBlend(this.alertBlend);
     }
 
-    this.clouds.update(deltaMs);
-    this.city.update(deltaMs);
-    this.defenses.update(deltaMs);
+    this.defenses.update(dt);
 
     if (this.alert) {
-      const spawned = this.spawner.update(deltaMs, {
+      const spawned = this.spawner.update(dt, {
         width: this.width,
         height: this.height,
         left: this.city.bounds.left,
@@ -152,7 +147,7 @@ export class GameScene implements Scene {
     }
 
     for (const threat of this.threats) {
-      threat.update(deltaMs);
+      threat.update(dt);
       while (threat.spawned.length > 0) {
         const child = threat.spawned.shift();
         if (child) {
@@ -222,7 +217,6 @@ export class GameScene implements Scene {
       return;
     }
     this.gameOver = true;
-    this.city.siren.setActive(false);
     this.overlayScore.text = `FINAL SCORE  ${this.score}`;
     this.overlay.visible = true;
   }
@@ -232,7 +226,6 @@ export class GameScene implements Scene {
     this.height = height;
     this.sky.setAlertBlend(this.alertBlend);
     this.sky.resize(width, height);
-    this.clouds.rebuild(width, height * 0.55);
     this.city.rebuild(width, height);
     if (resetDefense) {
       this.defenses.reset();

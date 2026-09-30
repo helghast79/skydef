@@ -51,12 +51,10 @@ export class ThreatSpawner {
     const targetX = bounds.left + Math.random() * (bounds.right - bounds.left);
     return new Threat({
       kind: 'ballistic',
-      phase: 'alert',
       startX: targetX,
-      startY: 58,
+      startY: -20,
       targetX,
       targetY: bounds.rooftop,
-      warnMs: 3000,
       durationMs: 9800,
       hitPoints: 1,
     });

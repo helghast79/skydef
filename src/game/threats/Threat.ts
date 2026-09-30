@@ -1,11 +1,11 @@
-import { Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
+import { Container, Graphics, Sprite, Texture } from 'pixi.js';
 
 import type { ScoreKind } from '../scoring';
 import { bombTextures, missileTextures } from '../sprites';
 import { theme } from '../theme';
 
 export type ThreatKind = 'drone' | 'bomber' | 'bomb' | 'ballistic' | 'cruise';
-export type ThreatPhase = 'alert' | 'air';
+export type ThreatPhase = 'air';
 export type DroneStage = 'strafe' | 'dive' | 'approach' | 'retreat';
 
 type ThreatOptions = {
@@ -16,14 +16,13 @@ type ThreatOptions = {
   targetY: number;
   controlX?: number;
   controlY?: number;
-  phase?: ThreatPhase;
-  warnMs?: number;
   durationMs?: number;
   hitPoints?: number;
   exitX?: number;
 };
 
-const SPRITE_SCALE = 0.04;
+const SPRITE_SCALE = 0.05;
+const MAX_DT = 1 / 30;
 
 export class Threat {
   readonly view = new Container();
@@ -35,7 +34,7 @@ export class Threat {
   alive = true;
   hitCity = false;
   done = false;
-  phase: ThreatPhase;
+  phase: ThreatPhase = 'air';
   hp: number;
   readonly maxHp: number;
   readonly spawned: Threat[] = [];
@@ -49,16 +48,8 @@ export class Threat {
   private animTime = 0;
   private flyingFrames: Texture[] = [];
   private explosionFrames: Texture[] = [];
-  private readonly mark = new Text({
-    text: 'INCOMING',
-    style: {
-      fontFamily: '"Oswald", sans-serif',
-      fontSize: 13,
-      fill: 0xffe08a,
-      letterSpacing: 1,
-    },
-  });
   private age = 0;
+  private facing = Math.PI / 2;
   private readonly targetX: number;
   private readonly targetY: number;
   private readonly exitX: number;
@@ -66,7 +57,6 @@ export class Threat {
   private startY: number;
   private readonly controlX: number;
   private readonly controlY: number;
-  private readonly warnMs: number;
   private readonly durationMs: number;
   private droneStage: DroneStage;
   private readonly fromLeft: boolean;
@@ -74,7 +64,6 @@ export class Threat {
   constructor(options: ThreatOptions) {
     this.kind = options.kind;
     this.scoreKind = options.kind === 'bomber' ? 'bomber' : options.kind;
-    this.phase = options.phase ?? 'air';
     this.x = options.startX;
     this.y = options.startY;
     this.startX = options.startX;
@@ -84,7 +73,6 @@ export class Threat {
     this.exitX = options.exitX ?? options.startX;
     this.controlX = options.controlX ?? (options.startX + options.targetX) / 2;
     this.controlY = options.controlY ?? Math.min(options.startY, options.targetY) - 80;
-    this.warnMs = options.warnMs ?? 3000;
     this.durationMs = options.durationMs ?? 8000;
     this.maxHp = options.hitPoints ?? 1;
     this.hp = this.maxHp;
@@ -92,6 +80,7 @@ export class Threat {
     this.droneStage = options.kind === 'bomber' ? 'approach' : 'strafe';
     this.radius =
       this.kind === 'bomb' ? 10 : this.kind === 'drone' || this.kind === 'bomber' ? 12 : 14;
+    this.facing = this.desiredHeading();
 
     if (this.kind === 'ballistic' || this.kind === 'cruise') {
       this.flyingFrames = missileTextures(this.kind, 'flying');
@@ -101,10 +90,10 @@ export class Threat {
       this.explosionFrames = bombTextures('explosion');
     }
 
-    this.mark.anchor.set(0.5, 1.15);
     this.art.anchor.set(0.5, 0.4);
+    this.art.roundPixels = false;
     this.art.visible = false;
-    this.view.addChild(this.path, this.body, this.art, this.mark);
+    this.view.addChild(this.path, this.body, this.art);
     this.buildGraphics();
     this.view.position.set(this.x, this.y);
   }
@@ -118,7 +107,7 @@ export class Threat {
   }
 
   takeHit(): boolean {
-    if (!this.alive || this.phase !== 'air' || this.exploding) {
+    if (!this.alive || this.exploding) {
       return false;
     }
     this.hp -= 1;
@@ -130,61 +119,37 @@ export class Threat {
   }
 
   update(deltaMs: number): void {
-    const dt = deltaMs / 1000;
+    const dt = Math.min(MAX_DT, deltaMs / 1000);
     if (this.exploding) {
       this.playExplosion(dt);
       return;
     }
     this.age += dt;
 
-    if (this.kind === 'ballistic' && this.phase === 'alert') {
-      this.x = this.targetX;
-      this.y = 58;
-      if (this.age >= this.warnMs / 1000) {
-        this.phase = 'air';
-        this.age = 0;
-        this.x = this.targetX;
-        this.y = 40;
-        this.startX = this.x;
-        this.startY = this.y;
-      }
-    } else if (this.kind === 'ballistic') {
+    if (this.kind === 'ballistic') {
       const t = Math.min(1, this.age / (this.durationMs / 1000));
-      this.x = this.startX + (this.targetX - this.startX) * t * 0.06;
-      this.y = this.startY + (this.targetY - this.startY) * t;
+      const eased = t * t * (3 - 2 * t);
+      this.x = this.startX + (this.targetX - this.startX) * eased * 0.06;
+      this.y = this.startY + (this.targetY - this.startY) * eased;
     } else if (this.kind === 'cruise') {
       const t = Math.min(1, this.age / (this.durationMs / 1000));
       this.x = this.bezier(this.startX, this.controlX, this.targetX, t);
       this.y = this.bezier(this.startY, this.controlY, this.targetY, t);
     } else if (this.kind === 'bomb') {
-      const fallSpeed = 55;
-      this.y += fallSpeed * dt;
+      this.y += 55 * dt;
     } else if (this.kind === 'bomber') {
       this.updateBomber(dt);
     } else {
       this.updateSuicideDrone(dt);
     }
 
-    if (this.kind === 'ballistic' && this.phase === 'air' && this.mark.visible) {
-      this.mark.visible = false;
-      this.path.clear();
-      this.body.visible = false;
-      this.showFlying();
-    }
-
-    if (this.kind === 'ballistic' && this.phase === 'alert') {
-      const pulse = 0.55 + Math.sin(this.age * 8) * 0.45;
-      this.body.alpha = 0.75 + pulse * 0.25;
-      this.mark.alpha = 0.8 + pulse * 0.2;
-      this.path.alpha = 0.55 + pulse * 0.25;
-    }
-
+    this.facing = this.lerpAngle(this.facing, this.desiredHeading(), Math.min(1, dt * 10));
     this.view.position.set(this.x, this.y);
     this.path.position.set(-this.x, -this.y);
     if (this.art.visible) {
       this.advanceFlying(dt);
-    } else if (!(this.kind === 'ballistic' && this.phase === 'alert')) {
-      this.body.rotation = this.heading();
+    } else {
+      this.body.rotation = this.facing;
     }
 
     if (this.kind === 'bomber' && this.droneStage === 'retreat') {
@@ -196,7 +161,7 @@ export class Threat {
       return;
     }
 
-    if (this.phase === 'air' && this.y >= this.targetY && this.kind !== 'bomber') {
+    if (this.y >= this.targetY && this.kind !== 'bomber') {
       this.kill(true);
     }
   }
@@ -250,7 +215,7 @@ export class Threat {
     return inv * inv * p0 + 2 * inv * t * p1 + t * t * p2;
   }
 
-  private heading(): number {
+  private desiredHeading(): number {
     if (this.kind === 'ballistic' || this.kind === 'bomb') {
       return Math.PI / 2;
     }
@@ -266,16 +231,18 @@ export class Threat {
     return Math.atan2(this.targetY - this.y, this.targetX - this.x);
   }
 
+  private lerpAngle(from: number, to: number, amount: number): number {
+    let delta = ((to - from + Math.PI) % (Math.PI * 2)) - Math.PI;
+    if (delta < -Math.PI) {
+      delta += Math.PI * 2;
+    }
+    return from + delta * amount;
+  }
+
   private buildGraphics(): void {
     this.body.clear();
     this.path.clear();
     this.path.position.set(-this.x, -this.y);
-    this.mark.visible = this.kind === 'ballistic' && this.phase === 'alert';
-
-    if (this.kind === 'ballistic' && this.phase === 'alert') {
-      this.drawBallisticAlert();
-      return;
-    }
 
     if (this.kind === 'cruise') {
       this.drawDashedCurve();
@@ -318,7 +285,7 @@ export class Threat {
     this.art.anchor.set(0.5, this.kind === 'bomb' ? 0.5 : 0.42);
     this.art.texture = this.flyingFrames[0];
     this.art.scale.set(SPRITE_SCALE);
-    this.art.rotation = this.heading() + Math.PI / 2;
+    this.art.rotation = this.facing + Math.PI / 2;
   }
 
   private advanceFlying(dt: number): void {
@@ -326,12 +293,13 @@ export class Threat {
       return;
     }
     this.animTime += dt;
-    const index = Math.floor(this.animTime * 14) % this.flyingFrames.length;
+    const fps = Math.max(8, this.flyingFrames.length * 1.2);
+    const index = Math.floor(this.animTime * fps) % this.flyingFrames.length;
     const frame = this.flyingFrames[index];
     if (this.art.texture !== frame) {
       this.art.texture = frame;
     }
-    this.art.rotation = this.heading() + Math.PI / 2;
+    this.art.rotation = this.facing + Math.PI / 2;
   }
 
   private playExplosion(dt: number): void {
@@ -341,7 +309,8 @@ export class Threat {
     }
     this.view.position.set(this.x, this.y);
     this.animTime += dt;
-    const index = Math.floor(this.animTime * 16);
+    const fps = Math.max(12, this.explosionFrames.length * 1.4);
+    const index = Math.floor(this.animTime * fps);
     if (index >= this.explosionFrames.length) {
       this.exploding = false;
       this.done = true;
@@ -366,48 +335,21 @@ export class Threat {
       this.done = true;
       return;
     }
-    const facing = this.heading() + Math.PI / 2;
     this.exploding = true;
     this.animTime = 0;
     this.path.visible = false;
     this.body.visible = false;
-    this.mark.visible = false;
     this.art.visible = true;
     this.art.blendMode = 'add';
     this.art.anchor.set(0.5);
-    this.art.rotation = facing;
+    this.art.rotation = this.facing + Math.PI / 2;
     this.art.texture = this.explosionFrames[0];
     this.art.scale.set(SPRITE_SCALE);
     this.view.position.set(this.x, this.y);
   }
 
-  private drawBallisticAlert(): void {
-    this.body.circle(0, 0, 22).fill({ color: 0x4a1010, alpha: 0.92 });
-    this.body.circle(0, 0, 22).stroke({ width: 4, color: 0xffe08a, alpha: 0.9 });
-    this.body.moveTo(0, 34).lineTo(14, 14).lineTo(-14, 14).fill({
-      color: theme.colors.warning,
-      alpha: 0.85,
-    });
-    this.body.circle(0, 0, 5).fill({ color: 0xffe08a });
-
-    const dash = 6;
-    const endY = this.targetY - 10;
-    for (let y = this.y + 36; y < endY; y += dash * 2) {
-      this.path.moveTo(this.x, y);
-      this.path.lineTo(this.x, Math.min(y + dash, endY));
-    }
-    this.path.stroke({ width: 1, color: 0xffe08a, alpha: 0.22 });
-    this.path.moveTo(this.x - 14, this.targetY);
-    this.path.lineTo(this.x, this.targetY - 14);
-    this.path.lineTo(this.x + 14, this.targetY);
-    this.path.lineTo(this.x, this.targetY + 8);
-    this.path.closePath();
-    this.path.fill({ color: theme.colors.warning, alpha: 0.45 });
-    this.path.stroke({ width: 2, color: 0xffe08a, alpha: 0.8 });
-  }
-
   private drawDashedCurve(): void {
-    const steps = 36;
+    const steps = 48;
     for (let i = 0; i < steps; i += 2) {
       const t0 = i / steps;
       const t1 = Math.min(1, (i + 0.7) / steps);

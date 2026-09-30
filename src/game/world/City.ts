@@ -1,7 +1,6 @@
 import { Container, Graphics } from 'pixi.js';
 
 import { theme } from '../theme';
-import { Siren } from './Siren';
 
 export type Building = {
   x: number;
@@ -13,7 +12,6 @@ export type Building = {
 
 export class City {
   readonly view = new Container();
-  readonly siren = new Siren();
   readonly buildings: Building[] = [];
 
   private readonly ground = new Graphics();
@@ -24,7 +22,7 @@ export class City {
   private infoTop = 0;
 
   constructor() {
-    this.view.addChild(this.ground, this.skyline, this.siren.view);
+    this.view.addChild(this.ground, this.skyline);
   }
 
   get bounds() {
@@ -55,10 +53,6 @@ export class City {
     this.drawBuildings(left, right, baseY - cityHeight, baseY);
   }
 
-  update(deltaMs: number): void {
-    this.siren.update(deltaMs);
-  }
-
   private drawGround(width: number, infoTop: number, left: number, right: number, baseY: number): void {
     this.ground.clear();
 
@@ -81,7 +75,6 @@ export class City {
     const scale = theme.layout.buildingScale;
     const palette = [theme.colors.buildingDark, theme.colors.buildingMid, theme.colors.buildingLight];
     let x = left + 6;
-    let tallest: Building | null = null;
 
     while (x < right - 16) {
       const remaining = right - 10 - x;
@@ -91,10 +84,6 @@ export class City {
       const y = baseY - height;
       const building: Building = { x, y, width, height, color };
       this.buildings.push(building);
-
-      if (!tallest || building.height > tallest.height) {
-        tallest = building;
-      }
 
       this.skyline.rect(x, y, width, height).fill({ color });
       this.skyline.rect(x, y, width, 3).fill({ color: 0x000000, alpha: 0.18 });
@@ -116,10 +105,6 @@ export class City {
       }
 
       x += width + 3;
-    }
-
-    if (tallest) {
-      this.siren.place(tallest.x + tallest.width / 2, tallest.y);
     }
   }
 }

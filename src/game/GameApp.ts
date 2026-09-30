@@ -23,8 +23,9 @@ export class GameApp {
       background: '#071018',
       antialias: true,
       autoDensity: true,
-      roundPixels: true,
+      roundPixels: false,
       resolution: Math.min(window.devicePixelRatio, 2),
+      powerPreference: 'high-performance',
     });
 
     const host = document.querySelector('#app');
@@ -59,7 +60,8 @@ export class GameApp {
     });
 
     this.app.ticker.add((ticker) => {
-      this.scenes.update(ticker.deltaMS, this.app.screen.width, this.app.screen.height);
+      const deltaMs = Math.min(ticker.deltaMS, 1000 / 30);
+      this.scenes.update(deltaMs, this.app.screen.width, this.app.screen.height);
       this.input.endFrame();
     });
 
