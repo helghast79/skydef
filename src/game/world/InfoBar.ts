@@ -23,11 +23,9 @@ export class InfoBar {
   });
   private readonly icons: Record<WeaponId, Sprite> = {
     missile: new Sprite(),
-    jammer: new Sprite(),
   };
   private readonly ammoText: Record<WeaponId, Text> = {
     missile: this.makeAmmoText(),
-    jammer: this.makeAmmoText(),
   };
   private slots: Slot[] = [];
   private bar = { x: 0, y: 0, width: 0, height: 0 };
@@ -103,7 +101,7 @@ export class InfoBar {
     downed: number;
     hits: number;
   }): void {
-    const signature = `${state.selected}:${state.ammo.missile}:${state.ammo.jammer}:${state.downed}:${state.hits}:${this.iconsReady}`;
+    const signature = `${state.selected}:${state.ammo.missile}:${state.downed}:${state.hits}:${this.iconsReady}`;
     if (signature === this.lastHud) {
       return;
     }

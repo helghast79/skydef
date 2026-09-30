@@ -1,4 +1,4 @@
-export const WEAPON_IDS = ['missile', 'jammer'] as const;
+export const WEAPON_IDS = ['missile'] as const;
 
 export type WeaponId = (typeof WEAPON_IDS)[number];
 
@@ -19,22 +19,11 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     id: 'missile',
     label: 'MISSILE',
     color: 0xff8a3a,
-    startAmmo: 8,
-    maxAmmo: 12,
-    regenMs: 2600,
+    startAmmo: 10,
+    maxAmmo: 14,
+    regenMs: 2200,
     regenAmount: 1,
     duration: 1.05,
     radius: 108,
-  },
-  jammer: {
-    id: 'jammer',
-    label: 'JAMMER',
-    color: 0x4aa8ff,
-    startAmmo: 2,
-    maxAmmo: 4,
-    regenMs: 6800,
-    regenAmount: 1,
-    duration: 6,
-    radius: 92,
   },
 };

@@ -13,20 +13,17 @@ type Effect = {
 };
 
 const MISSILE_FILL = 0xff8a3a;
-const JAMMER_FILL = 0x1a4a7a;
 
 export class DefenseSystem {
   readonly view = new Container();
   selected: WeaponId = 'missile';
   ammo: Record<WeaponId, number> = {
     missile: WEAPONS.missile.startAmmo,
-    jammer: WEAPONS.jammer.startAmmo,
   };
 
   private effects: Effect[] = [];
   private regenMs: Record<WeaponId, number> = {
     missile: 0,
-    jammer: 0,
   };
 
   reset(): void {
@@ -46,26 +43,17 @@ export class DefenseSystem {
   }
 
   tryFire(x: number, y: number): boolean {
-    const weapon = this.selected;
-    if (this.ammo[weapon] <= 0) {
+    if (this.ammo.missile <= 0) {
       return false;
     }
 
     const graphic = new Graphics();
     graphic.position.set(x, y);
+    graphic.circle(0, 0, 1).fill({ color: MISSILE_FILL, alpha: 0.3 });
+    graphic.scale.set(16);
     this.view.addChild(graphic);
-    this.effects.push({ weapon, x, y, age: 0, graphic });
-    this.ammo[weapon] -= 1;
-
-    if (weapon === 'missile') {
-      graphic.circle(0, 0, 1).fill({ color: MISSILE_FILL, alpha: 0.3 });
-      graphic.scale.set(16);
-      return true;
-    }
-
-    const radius = WEAPONS.jammer.radius;
-    graphic.circle(0, 0, radius).fill({ color: JAMMER_FILL, alpha: 0.16 });
-    graphic.circle(0, 0, radius).stroke({ width: 2.5, color: WEAPONS.jammer.color, alpha: 0.95 });
+    this.effects.push({ weapon: 'missile', x, y, age: 0, graphic });
+    this.ammo.missile -= 1;
     return true;
   }
 
@@ -86,16 +74,14 @@ export class DefenseSystem {
 
     for (const effect of this.effects) {
       effect.age += dt;
-      if (effect.weapon === 'missile') {
-        const fade = Math.max(0, 1 - effect.age / WEAPONS.missile.duration);
-        effect.graphic.position.set(effect.x, effect.y);
-        effect.graphic.scale.set(this.radiusOf(effect));
-        effect.graphic.alpha = fade;
-      }
+      const fade = Math.max(0, 1 - effect.age / WEAPONS.missile.duration);
+      effect.graphic.position.set(effect.x, effect.y);
+      effect.graphic.scale.set(this.radiusOf(effect));
+      effect.graphic.alpha = fade;
     }
 
     this.effects = this.effects.filter((effect) => {
-      if (effect.age < WEAPONS[effect.weapon].duration) {
+      if (effect.age < WEAPONS.missile.duration) {
         return true;
       }
       effect.graphic.destroy();
@@ -103,10 +89,8 @@ export class DefenseSystem {
     });
   }
 
-  consumeHits(threats: Threat[], deltaMs: number): number {
+  consumeHits(threats: Threat[]): number {
     let downed = 0;
-    const dt = deltaMs / 1000;
-    const insideJammer = new Set<Threat>();
 
     for (const effect of this.effects) {
       const radius = this.radiusOf(effect);
@@ -117,23 +101,9 @@ export class DefenseSystem {
         if (Math.hypot(threat.x - effect.x, threat.y - effect.y) >= radius + threat.radius) {
           continue;
         }
-        if (effect.weapon === 'missile' && threat.kind !== 'drone') {
-          if (threat.takeHit()) {
-            downed += 1;
-          }
+        if (threat.takeHit()) {
+          downed += 1;
         }
-        if (effect.weapon === 'jammer' && threat.kind === 'drone') {
-          insideJammer.add(threat);
-        }
-      }
-    }
-
-    for (const threat of threats) {
-      if (threat.kind !== 'drone' || !threat.alive) {
-        continue;
-      }
-      if (threat.dwellInJammer(insideJammer.has(threat), dt)) {
-        downed += 1;
       }
     }
 
@@ -141,10 +111,7 @@ export class DefenseSystem {
   }
 
   private radiusOf(effect: Effect): number {
-    const def = WEAPONS[effect.weapon];
-    if (effect.weapon === 'jammer') {
-      return def.radius;
-    }
+    const def = WEAPONS.missile;
     const t = Math.min(1, effect.age / def.duration);
     const eased = 1 - (1 - t) * (1 - t);
     return 16 + (def.radius - 16) * eased;

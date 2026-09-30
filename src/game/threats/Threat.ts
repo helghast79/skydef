@@ -33,7 +33,6 @@ export class Threat {
   phase: ThreatPhase;
   hp: number;
   readonly maxHp: number;
-  private jammerDwell = 0;
 
   private readonly path = new Graphics();
   private readonly body = new Graphics();
@@ -113,20 +112,6 @@ export class Threat {
       return true;
     }
     return false;
-  }
-
-  dwellInJammer(inside: boolean, dt: number): boolean {
-    if (!this.alive || this.kind !== 'drone' || this.phase !== 'air' || !inside) {
-      this.jammerDwell = 0;
-      return false;
-    }
-    this.jammerDwell += dt;
-    if (this.jammerDwell < 2) {
-      return false;
-    }
-    this.alive = false;
-    this.done = true;
-    return true;
   }
 
   update(deltaMs: number): void {

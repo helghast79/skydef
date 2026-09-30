@@ -2,12 +2,10 @@ import { Assets, Texture } from 'pixi.js';
 
 import type { WeaponId } from './defense/weapons';
 import { WEAPON_IDS } from './defense/weapons';
-import jammerUrl from '../assets/icons/weapon-jammer.svg?url';
 import missileUrl from '../assets/icons/weapon-missile.svg?url';
 
 const ICON_URLS: Record<WeaponId, string> = {
   missile: missileUrl,
-  jammer: jammerUrl,
 };
 
 const textures = {} as Record<WeaponId, Texture>;

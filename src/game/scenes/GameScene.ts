@@ -1,6 +1,5 @@
 import { Container } from 'pixi.js';
 
-import type { WeaponId } from '../defense/weapons';
 import { DefenseSystem } from '../defense/DefenseSystem';
 import { theme } from '../theme';
 import { Threat } from '../threats/Threat';
@@ -10,13 +9,6 @@ import { CloudLayer } from '../world/CloudLayer';
 import { InfoBar } from '../world/InfoBar';
 import { Sky } from '../world/Sky';
 import type { Scene, SceneContext } from './Scene';
-
-const WEAPON_KEYS: Record<string, WeaponId> = {
-  Digit1: 'missile',
-  Digit2: 'jammer',
-  '1': 'missile',
-  '2': 'jammer',
-};
 
 export class GameScene implements Scene {
   readonly name = 'game';
@@ -73,12 +65,6 @@ export class GameScene implements Scene {
       return;
     }
 
-    for (const [key, weapon] of Object.entries(WEAPON_KEYS)) {
-      if (context.input.wasPressed(key)) {
-        this.defenses.select(weapon);
-      }
-    }
-
     this.elapsed += deltaMs;
 
     if (!this.alert && this.elapsed >= theme.layout.peacefulMs) {
@@ -127,7 +113,7 @@ export class GameScene implements Scene {
       threat.update(deltaMs);
     }
 
-    this.downed += this.defenses.consumeHits(this.threats, deltaMs);
+    this.downed += this.defenses.consumeHits(this.threats);
 
     this.threats = this.threats.filter((threat) => {
       if (threat.claimCityHit()) {
