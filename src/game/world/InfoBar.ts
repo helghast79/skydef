@@ -3,6 +3,7 @@ import { Container, Graphics, Sprite, Text } from 'pixi.js';
 import type { WeaponId } from '../defense/weapons';
 import { WEAPON_IDS, WEAPONS } from '../defense/weapons';
 import { iconTexture } from '../icons';
+import { SCORE_TABLE } from '../scoring';
 import { theme } from '../theme';
 
 type Slot = { id: WeaponId; x: number; y: number; width: number; height: number };
@@ -13,12 +14,29 @@ export class InfoBar {
   readonly view = new Container();
   private readonly panel = new Graphics();
   private readonly slotsGfx = new Graphics();
-  private readonly hits = new Text({
+  private readonly healthGfx = new Graphics();
+  private readonly scoreText = new Text({
+    text: '',
+    style: {
+      fontFamily: HUD_FONT,
+      fontSize: 14,
+      fill: 0xffe08a,
+    },
+  });
+  private readonly healthText = new Text({
     text: '',
     style: {
       fontFamily: HUD_FONT,
       fontSize: 12,
       fill: 0xd6e2ea,
+    },
+  });
+  private readonly pointsText = new Text({
+    text: '',
+    style: {
+      fontFamily: HUD_FONT,
+      fontSize: 10,
+      fill: 0x8a9aaa,
     },
   });
   private readonly icons: Record<WeaponId, Sprite> = {
@@ -33,11 +51,19 @@ export class InfoBar {
   private lastHud = '';
 
   constructor() {
-    this.view.addChild(this.panel, this.slotsGfx, this.hits);
+    this.view.addChild(
+      this.panel,
+      this.slotsGfx,
+      this.healthGfx,
+      this.scoreText,
+      this.healthText,
+      this.pointsText,
+    );
     for (const id of WEAPON_IDS) {
       this.icons[id].anchor.set(0.5, 0.5);
       this.view.addChild(this.icons[id], this.ammoText[id]);
     }
+    this.pointsText.text = SCORE_TABLE.map((row) => `${row.label} ${row.points}`).join('   ');
   }
 
   bindIcons(): void {
@@ -60,21 +86,23 @@ export class InfoBar {
     this.panel.rect(0, 0, width, barHeight).fill({ color: theme.colors.hudBg });
     this.panel.rect(0, 0, width, 2).fill({ color: theme.colors.hudLine });
 
-    this.hits.anchor.set(1, 0.5);
-    this.hits.position.set(width - 16, barHeight / 2);
+    this.scoreText.anchor.set(0, 0.5);
+    this.scoreText.position.set(16, 18);
 
-    const slotCount = WEAPON_IDS.length;
-    const pad = 16;
-    const gap = 10;
-    const slotW = 88;
-    const slotH = 52;
-    const rowWidth = slotCount * slotW + (slotCount - 1) * gap;
-    const startX = Math.max(pad, (width - rowWidth) / 2);
-    const slotY = (barHeight - slotH) / 2;
+    this.healthText.anchor.set(0, 0.5);
+    this.healthText.position.set(16, 42);
 
-    this.slots = WEAPON_IDS.map((id, index) => ({
+    this.pointsText.anchor.set(1, 0.5);
+    this.pointsText.position.set(width - 16, 18);
+
+    const slotW = 96;
+    const slotH = 48;
+    const startX = width / 2 - slotW / 2;
+    const slotY = (barHeight - slotH) / 2 + 6;
+
+    this.slots = WEAPON_IDS.map((id) => ({
       id,
-      x: startX + index * (slotW + gap),
+      x: startX,
       y: slotY,
       width: slotW,
       height: slotH,
@@ -98,16 +126,28 @@ export class InfoBar {
   setState(state: {
     selected: WeaponId;
     ammo: Record<WeaponId, number>;
-    downed: number;
-    hits: number;
+    score: number;
+    health: number;
   }): void {
-    const signature = `${state.selected}:${state.ammo.missile}:${state.downed}:${state.hits}:${this.iconsReady}`;
+    const signature = `${state.selected}:${state.ammo.missile}:${state.score}:${state.health}:${this.iconsReady}`;
     if (signature === this.lastHud) {
       return;
     }
     this.lastHud = signature;
 
-    this.hits.text = `${state.downed}  ·  ${state.hits}  ·  ESC`;
+    this.scoreText.text = `SCORE  ${state.score}`;
+    this.healthText.text = `CITY  ${Math.max(0, Math.round(state.health))}%`;
+
+    this.healthGfx.clear();
+    const barX = 90;
+    const barY = 36;
+    const barW = 140;
+    const barH = 10;
+    const fill = Math.max(0, Math.min(1, state.health / 100));
+    this.healthGfx.roundRect(barX, barY, barW, barH, 3).fill({ color: 0x1a2228 });
+    this.healthGfx.roundRect(barX, barY, barW * fill, barH, 3).fill({
+      color: state.health > 40 ? 0x5ad67a : state.health > 20 ? 0xffc14a : 0xff4a3a,
+    });
 
     this.slotsGfx.clear();
     for (const slot of this.slots) {
@@ -123,14 +163,14 @@ export class InfoBar {
 
       const icon = this.icons[slot.id];
       icon.visible = this.iconsReady;
-      icon.position.set(slot.x + 24, slot.y + slot.height / 2);
+      icon.position.set(slot.x + 28, slot.y + slot.height / 2);
       icon.alpha = active ? 1 : 0.7;
 
       const ammo = this.ammoText[slot.id];
       ammo.text = `${state.ammo[slot.id]}`;
       ammo.style.fill = active ? def.color : 0xa8b4bc;
       ammo.anchor.set(0.5, 0.5);
-      ammo.position.set(slot.x + slot.width - 22, slot.y + slot.height / 2);
+      ammo.position.set(slot.x + slot.width - 24, slot.y + slot.height / 2);
     }
   }
 

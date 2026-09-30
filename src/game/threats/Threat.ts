@@ -1,5 +1,6 @@
 import { Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
 
+import type { ScoreKind } from '../scoring';
 import { bombTextures, missileTextures } from '../sprites';
 import { theme } from '../theme';
 
@@ -27,6 +28,7 @@ const SPRITE_SCALE = 0.04;
 export class Threat {
   readonly view = new Container();
   readonly kind: ThreatKind;
+  readonly scoreKind: ScoreKind;
   x: number;
   y: number;
   radius: number;
@@ -71,6 +73,7 @@ export class Threat {
 
   constructor(options: ThreatOptions) {
     this.kind = options.kind;
+    this.scoreKind = options.kind === 'bomber' ? 'bomber' : options.kind;
     this.phase = options.phase ?? 'air';
     this.x = options.startX;
     this.y = options.startY;

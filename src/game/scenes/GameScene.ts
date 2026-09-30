@@ -1,6 +1,7 @@
-import { Container } from 'pixi.js';
+import { Container, Graphics, Text } from 'pixi.js';
 
 import { DefenseSystem } from '../defense/DefenseSystem';
+import { CITY_DAMAGE } from '../scoring';
 import { theme } from '../theme';
 import { Threat } from '../threats/Threat';
 import { ThreatSpawner } from '../threats/ThreatSpawner';
@@ -20,19 +21,53 @@ export class GameScene implements Scene {
   private readonly defenses = new DefenseSystem();
   private readonly info = new InfoBar();
   private readonly threatLayer = new Container();
+  private readonly overlay = new Container();
+  private readonly overlayPanel = new Graphics();
+  private readonly overlayTitle = new Text({
+    text: 'CITY LOST',
+    style: {
+      fontFamily: theme.fonts.title,
+      fontSize: 56,
+      fill: 0xff6a4a,
+      letterSpacing: 6,
+    },
+  });
+  private readonly overlayScore = new Text({
+    text: '',
+    style: {
+      fontFamily: theme.fonts.mono,
+      fontSize: 18,
+      fill: 0xffe08a,
+    },
+  });
+  private readonly overlayHint = new Text({
+    text: 'ESC  RETURN TO MENU',
+    style: {
+      fontFamily: theme.fonts.mono,
+      fontSize: 14,
+      fill: 0x8a9aaa,
+      letterSpacing: 2,
+    },
+  });
   private readonly spawner = new ThreatSpawner();
   private threats: Threat[] = [];
 
   private elapsed = 0;
   private alert = false;
   private alertBlend = 0;
-  private downed = 0;
-  private hits = 0;
+  private score = 0;
+  private health = 100;
+  private gameOver = false;
   private width = 0;
   private height = 0;
 
   constructor() {
     this.info.bindIcons();
+    this.overlayTitle.anchor.set(0.5);
+    this.overlayScore.anchor.set(0.5);
+    this.overlayHint.anchor.set(0.5);
+    this.overlay.addChild(this.overlayPanel, this.overlayTitle, this.overlayScore, this.overlayHint);
+    this.overlay.visible = false;
     this.view.addChild(
       this.sky.view,
       this.clouds.view,
@@ -40,6 +75,7 @@ export class GameScene implements Scene {
       this.threatLayer,
       this.defenses.view,
       this.info.view,
+      this.overlay,
     );
   }
 
@@ -47,8 +83,10 @@ export class GameScene implements Scene {
     this.elapsed = 0;
     this.alert = false;
     this.alertBlend = 0;
-    this.downed = 0;
-    this.hits = 0;
+    this.score = 0;
+    this.health = 100;
+    this.gameOver = false;
+    this.overlay.visible = false;
     this.clearThreats();
     this.spawner.reset();
     this.city.siren.setActive(false);
@@ -62,6 +100,11 @@ export class GameScene implements Scene {
   update(deltaMs: number, context: SceneContext): void {
     if (context.input.wasPressed('Escape')) {
       context.goto('menu');
+      return;
+    }
+
+    if (this.gameOver) {
+      this.syncHud();
       return;
     }
 
@@ -118,11 +161,16 @@ export class GameScene implements Scene {
       }
     }
 
-    this.downed += this.defenses.consumeHits(this.threats);
+    for (const kill of this.defenses.consumeHits(this.threats)) {
+      this.score += kill.points;
+    }
 
     this.threats = this.threats.filter((threat) => {
       if (threat.claimCityHit()) {
-        this.hits += 1;
+        this.health = Math.max(0, this.health - CITY_DAMAGE[threat.scoreKind]);
+        if (this.health <= 0) {
+          this.triggerGameOver();
+        }
       }
       if (!threat.done) {
         return true;
@@ -143,13 +191,10 @@ export class GameScene implements Scene {
       scene: this.name,
       elapsed: Math.round(this.elapsed),
       alert: this.alert,
-      alertBlend: Number(this.alertBlend.toFixed(2)),
-      width: this.width,
-      height: this.height,
+      score: this.score,
+      health: this.health,
+      gameOver: this.gameOver,
       ammo: { ...this.defenses.ammo },
-      selected: this.defenses.selected,
-      downed: this.downed,
-      hits: this.hits,
       threats: this.threats.map((threat) => ({
         kind: threat.kind,
         phase: threat.phase,
@@ -172,6 +217,16 @@ export class GameScene implements Scene {
     this.threatLayer.addChild(threat.view);
   }
 
+  private triggerGameOver(): void {
+    if (this.gameOver) {
+      return;
+    }
+    this.gameOver = true;
+    this.city.siren.setActive(false);
+    this.overlayScore.text = `FINAL SCORE  ${this.score}`;
+    this.overlay.visible = true;
+  }
+
   private rebuild(width: number, height: number, resetDefense: boolean): void {
     this.width = width;
     this.height = height;
@@ -183,6 +238,11 @@ export class GameScene implements Scene {
       this.defenses.reset();
     }
     this.info.resize(width, height);
+    this.overlayPanel.clear();
+    this.overlayPanel.rect(0, 0, width, height).fill({ color: 0x05080c, alpha: 0.72 });
+    this.overlayTitle.position.set(width / 2, height * 0.4);
+    this.overlayScore.position.set(width / 2, height * 0.4 + 58);
+    this.overlayHint.position.set(width / 2, height * 0.4 + 100);
     this.syncHud();
   }
 
@@ -190,8 +250,8 @@ export class GameScene implements Scene {
     this.info.setState({
       selected: this.defenses.selected,
       ammo: this.defenses.ammo,
-      downed: this.downed,
-      hits: this.hits,
+      score: this.score,
+      health: this.health,
     });
   }
 

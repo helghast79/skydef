@@ -1,5 +1,7 @@
 import { Container, Graphics } from 'pixi.js';
 
+import type { ScoreKind } from '../scoring';
+import { scoreFor } from '../scoring';
 import type { Threat } from '../threats/Threat';
 import type { WeaponId } from './weapons';
 import { WEAPON_IDS, WEAPONS } from './weapons';
@@ -10,6 +12,11 @@ type Effect = {
   y: number;
   age: number;
   graphic: Graphics;
+};
+
+export type KillEvent = {
+  kind: ScoreKind;
+  points: number;
 };
 
 const MISSILE_FILL = 0xff8a3a;
@@ -89,8 +96,8 @@ export class DefenseSystem {
     });
   }
 
-  consumeHits(threats: Threat[]): number {
-    let downed = 0;
+  consumeHits(threats: Threat[]): KillEvent[] {
+    const kills: KillEvent[] = [];
 
     for (const effect of this.effects) {
       const radius = this.radiusOf(effect);
@@ -102,12 +109,12 @@ export class DefenseSystem {
           continue;
         }
         if (threat.takeHit()) {
-          downed += 1;
+          kills.push({ kind: threat.scoreKind, points: scoreFor(threat.scoreKind) });
         }
       }
     }
 
-    return downed;
+    return kills;
   }
 
   private radiusOf(effect: Effect): number {

@@ -36,7 +36,7 @@ export const theme = {
     warning: 0xff4a3a,
   },
   layout: {
-    infoBarHeight: 68,
+    infoBarHeight: 78,
     cityWidthRatio: 0.6,
     cityHeightRatio: 0.24,
     buildingScale: 0.8,
