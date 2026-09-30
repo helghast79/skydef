@@ -92,8 +92,7 @@ export class GameScene implements Scene {
         rooftop: this.city.bounds.rooftop,
       });
       for (const threat of spawned) {
-        this.threats.push(threat);
-        this.threatLayer.addChild(threat.view);
+        this.addThreat(threat);
       }
     }
 
@@ -111,6 +110,12 @@ export class GameScene implements Scene {
 
     for (const threat of this.threats) {
       threat.update(deltaMs);
+      while (threat.spawned.length > 0) {
+        const child = threat.spawned.shift();
+        if (child) {
+          this.addThreat(child);
+        }
+      }
     }
 
     this.downed += this.defenses.consumeHits(this.threats);
@@ -160,6 +165,11 @@ export class GameScene implements Scene {
   destroy(): void {
     this.clearThreats();
     this.view.destroy({ children: true });
+  }
+
+  private addThreat(threat: Threat): void {
+    this.threats.push(threat);
+    this.threatLayer.addChild(threat.view);
   }
 
   private rebuild(width: number, height: number, resetDefense: boolean): void {

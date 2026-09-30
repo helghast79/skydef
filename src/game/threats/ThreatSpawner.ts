@@ -3,12 +3,14 @@ import { Threat } from './Threat';
 export class ThreatSpawner {
   private ballisticIn = 0;
   private cruiseIn = 400;
-  private droneIn = 800;
+  private suicideIn = 800;
+  private bomberIn = 2200;
 
   reset(): void {
     this.ballisticIn = 0;
     this.cruiseIn = 400;
-    this.droneIn = 800;
+    this.suicideIn = 800;
+    this.bomberIn = 2200;
   }
 
   update(
@@ -17,7 +19,8 @@ export class ThreatSpawner {
   ): Threat[] {
     this.ballisticIn -= deltaMs;
     this.cruiseIn -= deltaMs;
-    this.droneIn -= deltaMs;
+    this.suicideIn -= deltaMs;
+    this.bomberIn -= deltaMs;
 
     const spawned: Threat[] = [];
 
@@ -31,9 +34,14 @@ export class ThreatSpawner {
       spawned.push(this.spawnCruise(bounds));
     }
 
-    if (this.droneIn <= 0) {
-      this.droneIn = 5200 + Math.random() * 2800;
-      spawned.push(this.spawnDrone(bounds));
+    if (this.suicideIn <= 0) {
+      this.suicideIn = 5200 + Math.random() * 2800;
+      spawned.push(this.spawnSuicideDrone(bounds));
+    }
+
+    if (this.bomberIn <= 0) {
+      this.bomberIn = 7000 + Math.random() * 3500;
+      spawned.push(this.spawnBomber(bounds));
     }
 
     return spawned;
@@ -80,7 +88,7 @@ export class ThreatSpawner {
     });
   }
 
-  private spawnDrone(bounds: {
+  private spawnSuicideDrone(bounds: {
     width: number;
     height: number;
     left: number;
@@ -99,6 +107,29 @@ export class ThreatSpawner {
       startY,
       targetX,
       targetY: bounds.rooftop,
+    });
+  }
+
+  private spawnBomber(bounds: {
+    width: number;
+    height: number;
+    left: number;
+    right: number;
+    rooftop: number;
+  }): Threat {
+    const fromLeft = Math.random() > 0.5;
+    const startX = fromLeft ? -28 : bounds.width + 28;
+    const exitX = fromLeft ? bounds.width + 40 : -40;
+    const altitude = bounds.height * (0.28 + Math.random() * 0.16);
+    const dropX = bounds.left + Math.random() * (bounds.right - bounds.left);
+
+    return new Threat({
+      kind: 'bomber',
+      startX,
+      startY: altitude,
+      targetX: dropX,
+      targetY: bounds.rooftop,
+      exitX,
     });
   }
 }

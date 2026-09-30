@@ -1,11 +1,11 @@
 import { Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
 
-import { missileTextures } from '../sprites';
+import { bombTextures, missileTextures } from '../sprites';
 import { theme } from '../theme';
 
-export type ThreatKind = 'drone' | 'ballistic' | 'cruise';
+export type ThreatKind = 'drone' | 'bomber' | 'bomb' | 'ballistic' | 'cruise';
 export type ThreatPhase = 'alert' | 'air';
-export type DroneStage = 'strafe' | 'dive';
+export type DroneStage = 'strafe' | 'dive' | 'approach' | 'retreat';
 
 type ThreatOptions = {
   kind: ThreatKind;
@@ -19,7 +19,10 @@ type ThreatOptions = {
   warnMs?: number;
   durationMs?: number;
   hitPoints?: number;
+  exitX?: number;
 };
+
+const SPRITE_SCALE = 0.04;
 
 export class Threat {
   readonly view = new Container();
@@ -33,12 +36,14 @@ export class Threat {
   phase: ThreatPhase;
   hp: number;
   readonly maxHp: number;
+  readonly spawned: Threat[] = [];
 
   private readonly path = new Graphics();
   private readonly body = new Graphics();
   private readonly art = new Sprite();
   private exploding = false;
   private cityClaimed = false;
+  private bombDropped = false;
   private animTime = 0;
   private flyingFrames: Texture[] = [];
   private explosionFrames: Texture[] = [];
@@ -54,13 +59,14 @@ export class Threat {
   private age = 0;
   private readonly targetX: number;
   private readonly targetY: number;
+  private readonly exitX: number;
   private startX: number;
   private startY: number;
   private readonly controlX: number;
   private readonly controlY: number;
   private readonly warnMs: number;
   private readonly durationMs: number;
-  private droneStage: DroneStage = 'strafe';
+  private droneStage: DroneStage;
   private readonly fromLeft: boolean;
 
   constructor(options: ThreatOptions) {
@@ -72,18 +78,24 @@ export class Threat {
     this.startY = options.startY;
     this.targetX = options.targetX;
     this.targetY = options.targetY;
+    this.exitX = options.exitX ?? options.startX;
     this.controlX = options.controlX ?? (options.startX + options.targetX) / 2;
     this.controlY = options.controlY ?? Math.min(options.startY, options.targetY) - 80;
     this.warnMs = options.warnMs ?? 3000;
     this.durationMs = options.durationMs ?? 8000;
     this.maxHp = options.hitPoints ?? 1;
     this.hp = this.maxHp;
-    this.radius = this.kind === 'drone' ? 11 : this.kind === 'cruise' ? 14 : 14;
     this.fromLeft = options.startX < options.targetX;
+    this.droneStage = options.kind === 'bomber' ? 'approach' : 'strafe';
+    this.radius =
+      this.kind === 'bomb' ? 10 : this.kind === 'drone' || this.kind === 'bomber' ? 12 : 14;
 
     if (this.kind === 'ballistic' || this.kind === 'cruise') {
       this.flyingFrames = missileTextures(this.kind, 'flying');
       this.explosionFrames = missileTextures(this.kind, 'explosion');
+    } else if (this.kind === 'bomb') {
+      this.flyingFrames = bombTextures('idle');
+      this.explosionFrames = bombTextures('explosion');
     }
 
     this.mark.anchor.set(0.5, 1.15);
@@ -141,8 +153,13 @@ export class Threat {
       const t = Math.min(1, this.age / (this.durationMs / 1000));
       this.x = this.bezier(this.startX, this.controlX, this.targetX, t);
       this.y = this.bezier(this.startY, this.controlY, this.targetY, t);
+    } else if (this.kind === 'bomb') {
+      const fallSpeed = 55;
+      this.y += fallSpeed * dt;
+    } else if (this.kind === 'bomber') {
+      this.updateBomber(dt);
     } else {
-      this.updateDrone(dt);
+      this.updateSuicideDrone(dt);
     }
 
     if (this.kind === 'ballistic' && this.phase === 'air' && this.mark.visible) {
@@ -167,12 +184,21 @@ export class Threat {
       this.body.rotation = this.heading();
     }
 
-    if (this.phase === 'air' && this.y >= this.targetY) {
+    if (this.kind === 'bomber' && this.droneStage === 'retreat') {
+      const offscreen = this.fromLeft ? this.x > this.exitX : this.x < this.exitX;
+      if (offscreen) {
+        this.alive = false;
+        this.done = true;
+      }
+      return;
+    }
+
+    if (this.phase === 'air' && this.y >= this.targetY && this.kind !== 'bomber') {
       this.kill(true);
     }
   }
 
-  private updateDrone(dt: number): void {
+  private updateSuicideDrone(dt: number): void {
     const strafeSpeed = 18;
     const diveSpeed = 22;
 
@@ -192,13 +218,37 @@ export class Threat {
     this.y += (dy / length) * diveSpeed * dt;
   }
 
+  private updateBomber(dt: number): void {
+    const cruiseSpeed = 42;
+    if (this.droneStage === 'approach') {
+      this.x += (this.fromLeft ? 1 : -1) * cruiseSpeed * dt;
+      const reached = this.fromLeft ? this.x >= this.targetX : this.x <= this.targetX;
+      if (reached && !this.bombDropped) {
+        this.bombDropped = true;
+        this.spawned.push(
+          new Threat({
+            kind: 'bomb',
+            startX: this.x,
+            startY: this.y + 12,
+            targetX: this.x,
+            targetY: this.targetY,
+          }),
+        );
+        this.droneStage = 'retreat';
+      }
+      return;
+    }
+
+    this.x += (this.fromLeft ? 1 : -1) * cruiseSpeed * dt;
+  }
+
   private bezier(p0: number, p1: number, p2: number, t: number): number {
     const inv = 1 - t;
     return inv * inv * p0 + 2 * inv * t * p1 + t * t * p2;
   }
 
   private heading(): number {
-    if (this.kind === 'ballistic') {
+    if (this.kind === 'ballistic' || this.kind === 'bomb') {
       return Math.PI / 2;
     }
     if (this.kind === 'cruise') {
@@ -207,7 +257,7 @@ export class Threat {
       const ny = this.bezier(this.startY, this.controlY, this.targetY, t + 0.02);
       return Math.atan2(ny - this.y, nx - this.x);
     }
-    if (this.droneStage === 'strafe') {
+    if (this.kind === 'bomber' || this.droneStage === 'strafe') {
       return this.fromLeft ? 0 : Math.PI;
     }
     return Math.atan2(this.targetY - this.y, this.targetX - this.x);
@@ -230,7 +280,7 @@ export class Threat {
       return;
     }
 
-    if (this.kind === 'ballistic') {
+    if (this.kind === 'ballistic' || this.kind === 'bomb') {
       this.showFlying();
       return;
     }
@@ -241,23 +291,17 @@ export class Threat {
   private buildBody(): void {
     this.body.clear();
     this.body.visible = true;
-    switch (this.kind) {
-      case 'drone':
-        this.body.rect(-10, -3, 20, 6).fill({ color: theme.colors.threatDrone });
-        this.body.rect(-14, -1, 8, 2).fill({ color: 0x88aa88 });
-        this.body.rect(6, -1, 8, 2).fill({ color: 0x88aa88 });
-        this.body.circle(0, 0, 2).fill({ color: 0xff4444 });
-        break;
-      case 'ballistic':
-        this.body.moveTo(0, -16).lineTo(5, 12).lineTo(-5, 12).fill({ color: theme.colors.threatBallistic });
-        this.body.rect(-2, 12, 4, 10).fill({ color: 0xffaa66, alpha: 0.85 });
-        break;
-      case 'cruise':
-        this.body.rect(-16, -4, 28, 8).fill({ color: theme.colors.threatCruise });
-        this.body.moveTo(12, -4).lineTo(22, 0).lineTo(12, 4).fill({ color: 0x6a6a4a });
-        this.body.rect(-10, -7, 7, 3).fill({ color: 0x333328 });
-        break;
+    if (this.kind === 'bomber') {
+      this.body.rect(-14, -4, 28, 8).fill({ color: 0x3a4a3a });
+      this.body.rect(-18, -2, 8, 4).fill({ color: 0x88aa88 });
+      this.body.rect(10, -2, 8, 4).fill({ color: 0x88aa88 });
+      this.body.circle(0, 2, 3).fill({ color: 0xffaa44 });
+      return;
     }
+    this.body.rect(-10, -3, 20, 6).fill({ color: theme.colors.threatDrone });
+    this.body.rect(-14, -1, 8, 2).fill({ color: 0x88aa88 });
+    this.body.rect(6, -1, 8, 2).fill({ color: 0x88aa88 });
+    this.body.circle(0, 0, 2).fill({ color: 0xff4444 });
   }
 
   private showFlying(): void {
@@ -268,10 +312,9 @@ export class Threat {
     this.body.visible = false;
     this.art.visible = true;
     this.art.blendMode = 'normal';
-    this.art.anchor.set(0.5, 0.42);
+    this.art.anchor.set(0.5, this.kind === 'bomb' ? 0.5 : 0.42);
     this.art.texture = this.flyingFrames[0];
-    const height = this.kind === 'ballistic' ? 86 : 78;
-    this.art.scale.set(height / this.flyingFrames[0].height);
+    this.art.scale.set(SPRITE_SCALE);
     this.art.rotation = this.heading() + Math.PI / 2;
   }
 
@@ -331,7 +374,7 @@ export class Threat {
     this.art.anchor.set(0.5);
     this.art.rotation = facing;
     this.art.texture = this.explosionFrames[0];
-    this.art.scale.set(140 / this.explosionFrames[0].height);
+    this.art.scale.set(SPRITE_SCALE);
     this.view.position.set(this.x, this.y);
   }
 
