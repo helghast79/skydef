@@ -31,6 +31,8 @@ export class City {
       right: this.right,
       rooftop: this.rooftop,
       infoTop: this.infoTop,
+      gunX: (this.left + this.right) / 2,
+      gunY: this.rooftop + 2,
     };
   }
 
