@@ -1,7 +1,7 @@
 import { Container, Graphics, Sprite, Texture } from 'pixi.js';
 
 import type { ScoreKind } from '../scoring';
-import { bombTextures, missileTextures } from '../sprites';
+import { bombTextures, fxTextures, missileTextures } from '../sprites';
 import { theme } from '../theme';
 
 export type ThreatKind = 'drone' | 'bomber' | 'bomb' | 'ballistic' | 'cruise';
@@ -84,11 +84,10 @@ export class Threat {
 
     if (this.kind === 'ballistic' || this.kind === 'cruise') {
       this.flyingFrames = missileTextures(this.kind, 'flying');
-      this.explosionFrames = missileTextures(this.kind, 'explosion');
     } else if (this.kind === 'bomb') {
       this.flyingFrames = bombTextures('idle');
-      this.explosionFrames = bombTextures('explosion');
     }
+    this.explosionFrames = fxTextures('air');
 
     this.art.anchor.set(0.5, 0.4);
     this.art.roundPixels = false;
@@ -331,6 +330,7 @@ export class Threat {
     if (hitCity) {
       this.hitCity = true;
     }
+    this.explosionFrames = fxTextures(hitCity ? 'ground' : 'air');
     if (this.explosionFrames.length === 0) {
       this.done = true;
       return;
@@ -342,9 +342,9 @@ export class Threat {
     this.art.visible = true;
     this.art.blendMode = 'add';
     this.art.anchor.set(0.5);
-    this.art.rotation = this.facing + Math.PI / 2;
+    this.art.rotation = 0;
     this.art.texture = this.explosionFrames[0];
-    this.art.scale.set(SPRITE_SCALE);
+    this.art.scale.set(hitCity ? 0.2 : 0.16);
     this.view.position.set(this.x, this.y);
   }
 
