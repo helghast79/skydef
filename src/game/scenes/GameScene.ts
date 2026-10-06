@@ -1,6 +1,8 @@
 import { Container, Graphics, Text } from 'pixi.js';
 
 import { DefenseSystem } from '../defense/DefenseSystem';
+import { WeaponDrop } from '../defense/WeaponDrop';
+import { DROPPABLE_WEAPONS, WEAPONS } from '../defense/weapons';
 import { CITY_DAMAGE } from '../scoring';
 import { theme } from '../theme';
 import { Threat } from '../threats/Threat';
@@ -19,6 +21,7 @@ export class GameScene implements Scene {
   private readonly defenses = new DefenseSystem();
   private readonly info = new InfoBar();
   private readonly threatLayer = new Container();
+  private readonly dropLayer = new Container();
   private readonly overlay = new Container();
   private readonly overlayPanel = new Graphics();
   private readonly overlayTitle = new Text({
@@ -49,6 +52,7 @@ export class GameScene implements Scene {
   });
   private readonly spawner = new ThreatSpawner();
   private threats: Threat[] = [];
+  private drops: WeaponDrop[] = [];
 
   private elapsed = 0;
   private alert = false;
@@ -56,6 +60,7 @@ export class GameScene implements Scene {
   private score = 0;
   private health = 100;
   private gameOver = false;
+  private dropIn = 9000;
   private width = 0;
   private height = 0;
 
@@ -70,6 +75,7 @@ export class GameScene implements Scene {
       this.sky.view,
       this.city.view,
       this.threatLayer,
+      this.dropLayer,
       this.defenses.view,
       this.info.view,
       this.overlay,
@@ -83,14 +89,17 @@ export class GameScene implements Scene {
     this.score = 0;
     this.health = 100;
     this.gameOver = false;
+    this.dropIn = 9000;
     this.overlay.visible = false;
     this.clearThreats();
+    this.clearDrops();
     this.spawner.reset();
     this.rebuild(context.width, context.height, true);
   }
 
   exit(): void {
     this.clearThreats();
+    this.clearDrops();
   }
 
   update(deltaMs: number, context: SceneContext): void {
@@ -119,8 +128,6 @@ export class GameScene implements Scene {
       this.sky.setAlertBlend(this.alertBlend);
     }
 
-    this.defenses.update(dt);
-
     if (this.alert) {
       const spawned = this.spawner.update(dt, {
         width: this.width,
@@ -132,18 +139,26 @@ export class GameScene implements Scene {
       for (const threat of spawned) {
         this.addThreat(threat);
       }
+
+      this.dropIn -= dt;
+      if (this.dropIn <= 0) {
+        this.dropIn = 11000 + Math.random() * 9000;
+        this.spawnWeaponDrop();
+      }
     }
 
     const pointer = context.input.pointer;
-    if (pointer.clicked) {
-      if (this.info.contains(pointer.x, pointer.y)) {
-        const weapon = this.info.hitWeapon(pointer.x, pointer.y);
-        if (weapon) {
-          this.defenses.select(weapon);
-        }
-      } else if (pointer.y < this.city.bounds.infoTop) {
-        this.defenses.tryFire(pointer.x, pointer.y);
+    if (pointer.clicked && this.info.contains(pointer.x, pointer.y)) {
+      const weapon = this.info.hitWeapon(pointer.x, pointer.y);
+      if (weapon) {
+        this.defenses.select(weapon);
       }
+    } else if (
+      (pointer.clicked || pointer.down) &&
+      pointer.y < this.city.bounds.infoTop &&
+      !this.info.contains(pointer.x, pointer.y)
+    ) {
+      this.defenses.tryFire(pointer.x, pointer.y);
     }
 
     for (const threat of this.threats) {
@@ -156,9 +171,24 @@ export class GameScene implements Scene {
       }
     }
 
-    for (const kill of this.defenses.consumeHits(this.threats)) {
+    this.defenses.update(dt, this.threats);
+    for (const kill of this.defenses.consumeHits()) {
       this.score += kill.points;
     }
+
+    for (const drop of this.drops) {
+      drop.update(dt);
+      if (drop.collected) {
+        this.defenses.grantWeapon(drop.weapon, drop.ammo);
+      }
+    }
+    this.drops = this.drops.filter((drop) => {
+      if (!drop.done) {
+        return true;
+      }
+      drop.view.destroy();
+      return false;
+    });
 
     this.threats = this.threats.filter((threat) => {
       if (threat.claimCityHit()) {
@@ -189,22 +219,43 @@ export class GameScene implements Scene {
       score: this.score,
       health: this.health,
       gameOver: this.gameOver,
+      heat: this.defenses.heat,
+      selected: this.defenses.selected,
+      owned: [...this.defenses.owned],
       ammo: { ...this.defenses.ammo },
       threats: this.threats.map((threat) => ({
         kind: threat.kind,
-        phase: threat.phase,
         x: Math.round(threat.x),
         y: Math.round(threat.y),
-        hp: threat.hp,
-        done: threat.done,
         alive: threat.alive,
+      })),
+      drops: this.drops.map((drop) => ({
+        weapon: drop.weapon,
+        x: Math.round(drop.x),
+        y: Math.round(drop.y),
       })),
     };
   }
 
   destroy(): void {
     this.clearThreats();
+    this.clearDrops();
     this.view.destroy({ children: true });
+  }
+
+  private spawnWeaponDrop(): void {
+    const weapon = DROPPABLE_WEAPONS[Math.floor(Math.random() * DROPPABLE_WEAPONS.length)];
+    const left = this.city.bounds.left;
+    const right = this.city.bounds.right;
+    const drop = new WeaponDrop({
+      weapon,
+      ammo: WEAPONS[weapon].dropAmmo,
+      startX: left + Math.random() * (right - left),
+      startY: -40,
+      targetY: this.city.bounds.rooftop - 8,
+    });
+    this.drops.push(drop);
+    this.dropLayer.addChild(drop.view);
   }
 
   private addThreat(threat: Threat): void {
@@ -227,8 +278,11 @@ export class GameScene implements Scene {
     this.sky.setAlertBlend(this.alertBlend);
     this.sky.resize(width, height);
     this.city.rebuild(width, height);
+    const { gunX, gunY } = this.city.bounds;
     if (resetDefense) {
-      this.defenses.reset();
+      this.defenses.reset(gunX, gunY);
+    } else {
+      this.defenses.setGun(gunX, gunY);
     }
     this.info.resize(width, height);
     this.overlayPanel.clear();
@@ -242,7 +296,10 @@ export class GameScene implements Scene {
   private syncHud(): void {
     this.info.setState({
       selected: this.defenses.selected,
+      owned: this.defenses.owned,
       ammo: this.defenses.ammo,
+      heat: this.defenses.heat,
+      overheated: this.defenses.overheated,
       score: this.score,
       health: this.health,
     });
@@ -254,5 +311,13 @@ export class GameScene implements Scene {
     }
     this.threats = [];
     this.threatLayer.removeChildren();
+  }
+
+  private clearDrops(): void {
+    for (const drop of this.drops) {
+      drop.view.destroy();
+    }
+    this.drops = [];
+    this.dropLayer.removeChildren();
   }
 }
