@@ -349,7 +349,7 @@ export class Threat {
   }
 
   private drawDashedCurve(): void {
-    const steps = 48;
+    const steps = 24;
     for (let i = 0; i < steps; i += 2) {
       const t0 = i / steps;
       const t1 = Math.min(1, (i + 0.7) / steps);

@@ -20,15 +20,13 @@ type Projectile = {
   killChanceMax: number;
   checked: Set<Threat>;
   graphic: Graphics;
+  alive: boolean;
 };
 
 type Burst = {
-  x: number;
-  y: number;
   age: number;
   frames: ReturnType<typeof fxTextures>;
   sprite: Sprite;
-  scale: number;
 };
 
 export type KillEvent = {
@@ -39,6 +37,8 @@ export type KillEvent = {
 const HEAT_COOL_PER_SEC = 18;
 const OVERHEAT_RECOVER = 28;
 const MAX_HEAT = 100;
+const MAX_BURSTS = 6;
+const MAX_IMPACTS = 12;
 
 export class DefenseSystem {
   readonly view = new Container();
@@ -59,7 +59,11 @@ export class DefenseSystem {
   private readonly gun = new Graphics();
   private readonly projectiles: Projectile[] = [];
   private readonly bursts: Burst[] = [];
+  private readonly impacts: { age: number; graphic: Graphics }[] = [];
   private readonly pendingKills: KillEvent[] = [];
+  private readonly shotPool: Graphics[] = [];
+  private readonly impactPool: Graphics[] = [];
+  private lastGunKey = '';
 
   constructor() {
     this.view.addChild(this.gun);
@@ -77,22 +81,27 @@ export class DefenseSystem {
       this.ammo[id] = WEAPONS[id].startAmmo;
     }
     for (const shot of this.projectiles) {
-      shot.graphic.destroy();
+      this.releaseShot(shot.graphic);
     }
     this.projectiles.length = 0;
     for (const burst of this.bursts) {
       burst.sprite.destroy();
     }
     this.bursts.length = 0;
+    for (const impact of this.impacts) {
+      this.releaseImpact(impact.graphic);
+    }
+    this.impacts.length = 0;
     this.pendingKills.length = 0;
     this.aim = -Math.PI / 2;
-    this.drawGun();
+    this.lastGunKey = '';
+    this.drawGun(true);
   }
 
   setGun(gunX: number, gunY: number): void {
     this.gunX = gunX;
     this.gunY = gunY;
-    this.drawGun();
+    this.drawGun(true);
   }
 
   select(weapon: WeaponId): void {
@@ -100,6 +109,7 @@ export class DefenseSystem {
       return;
     }
     this.selected = weapon;
+    this.drawGun();
   }
 
   grantWeapon(weapon: WeaponId, ammo: number): void {
@@ -124,6 +134,7 @@ export class DefenseSystem {
     if (weapon === 'artillery') {
       if (this.overheated || this.heat >= MAX_HEAT) {
         this.overheated = true;
+        this.drawGun();
         return false;
       }
     } else if (this.ammo[weapon] <= 0) {
@@ -137,17 +148,9 @@ export class DefenseSystem {
     const uy = dy / length;
     this.aim = Math.atan2(uy, ux);
 
-    const graphic = new Graphics();
-    if (weapon === 'artillery') {
-      graphic.rect(-1, -7, 2, 14).fill({ color: 0xffe08a });
-    } else if (weapon === 'missile') {
-      graphic.roundRect(-2.5, -9, 5, 18, 1.5).fill({ color: def.color });
-    } else {
-      graphic.rect(-1.5, -6, 3, 12).fill({ color: def.color });
-      graphic.circle(0, 0, 2.5).fill({ color: 0xd0ecff, alpha: 0.85 });
-    }
+    const graphic = this.acquireShot(weapon, def.color);
     graphic.rotation = this.aim + Math.PI / 2;
-    graphic.position.set(this.gunX, this.gunY);
+    graphic.position.set(this.gunX + ux * 18, this.gunY + uy * 18);
     this.view.addChild(graphic);
 
     this.projectiles.push({
@@ -163,6 +166,7 @@ export class DefenseSystem {
       killChanceMax: def.killChanceMax,
       checked: new Set(),
       graphic,
+      alive: true,
     });
 
     this.fireCooldown = def.fireCooldownMs;
@@ -186,9 +190,13 @@ export class DefenseSystem {
     this.heat = Math.max(0, this.heat - HEAT_COOL_PER_SEC * dt);
     if (this.overheated && this.heat <= OVERHEAT_RECOVER) {
       this.overheated = false;
+      this.drawGun();
     }
 
     for (const shot of this.projectiles) {
+      if (!shot.alive) {
+        continue;
+      }
       shot.x += shot.vx * dt;
       shot.y += shot.vy * dt;
       shot.graphic.position.set(shot.x, shot.y);
@@ -210,67 +218,90 @@ export class DefenseSystem {
             kind: threat.scoreKind,
             points: scoreFor(threat.scoreKind),
           });
-          shot.graphic.destroy();
-          shot.vx = 0;
-          shot.vy = 0;
-          shot.targetX = shot.x;
-          shot.targetY = shot.y;
+          shot.alive = false;
           break;
         }
       }
-    }
 
-    this.projectiles.splice(
-      0,
-      this.projectiles.length,
-      ...this.projectiles.filter((shot) => {
-        if (shot.vx === 0 && shot.vy === 0) {
-          return false;
-        }
-        const toTarget = Math.hypot(shot.targetX - shot.x, shot.targetY - shot.y);
-        const traveledPast =
-          (shot.x - this.gunX) * (shot.targetX - this.gunX) +
-            (shot.y - this.gunY) * (shot.targetY - this.gunY) >
-          Math.hypot(shot.targetX - this.gunX, shot.targetY - this.gunY) ** 2;
-        if (toTarget < 10 || traveledPast) {
-          this.spawnBurst(shot.targetX, shot.targetY, 'ground', 0.12);
-          shot.graphic.destroy();
-          return false;
-        }
-        return true;
-      }),
-    );
-
-    for (const burst of this.bursts) {
-      burst.age += dt;
-      const fps = Math.max(12, burst.frames.length * 1.5);
-      const index = Math.floor(burst.age * fps);
-      if (index >= burst.frames.length) {
-        burst.sprite.visible = false;
+      if (!shot.alive) {
         continue;
       }
-      burst.sprite.texture = burst.frames[index];
+
+      const toTarget = Math.hypot(shot.targetX - shot.x, shot.targetY - shot.y);
+      const reach = Math.hypot(shot.targetX - this.gunX, shot.targetY - this.gunY);
+      const traveled =
+        (shot.x - this.gunX) * (shot.targetX - this.gunX) +
+        (shot.y - this.gunY) * (shot.targetY - this.gunY);
+      if (toTarget < 10 || traveled > reach * reach) {
+        this.spawnImpact(shot.targetX, shot.targetY, shot.weapon);
+        shot.alive = false;
+      }
+    }
+
+    for (let i = this.projectiles.length - 1; i >= 0; i -= 1) {
+      const shot = this.projectiles[i];
+      if (shot.alive) {
+        continue;
+      }
+      this.releaseShot(shot.graphic);
+      this.projectiles.splice(i, 1);
     }
 
     for (let i = this.bursts.length - 1; i >= 0; i -= 1) {
       const burst = this.bursts[i];
-      if (burst.sprite.visible) {
+      burst.age += dt;
+      const fps = Math.max(12, burst.frames.length * 1.5);
+      const index = Math.floor(burst.age * fps);
+      if (index >= burst.frames.length) {
+        burst.sprite.destroy();
+        this.bursts.splice(i, 1);
         continue;
       }
-      burst.sprite.destroy();
-      this.bursts.splice(i, 1);
+      const frame = burst.frames[index];
+      if (burst.sprite.texture !== frame) {
+        burst.sprite.texture = frame;
+      }
     }
 
-    this.drawGun();
+    for (let i = this.impacts.length - 1; i >= 0; i -= 1) {
+      const impact = this.impacts[i];
+      impact.age += dt;
+      impact.graphic.alpha = Math.max(0, 1 - impact.age / 0.18);
+      if (impact.age >= 0.18) {
+        this.releaseImpact(impact.graphic);
+        this.impacts.splice(i, 1);
+      }
+    }
   }
 
   consumeHits(): KillEvent[] {
-    const kills = this.pendingKills.splice(0, this.pendingKills.length);
-    return kills;
+    return this.pendingKills.splice(0, this.pendingKills.length);
   }
 
   spawnGroundBurst(x: number, y: number): void {
-    this.spawnBurst(x, y, 'ground', 0.16);
+    this.spawnBurst(x, y, 'ground', 0.14);
+  }
+
+  private spawnImpact(x: number, y: number, weapon: WeaponId): void {
+    if (weapon === 'missile' || weapon === 'flak') {
+      this.spawnBurst(x, y, 'ground', weapon === 'missile' ? 0.14 : 0.1);
+      return;
+    }
+
+    if (this.impacts.length >= MAX_IMPACTS) {
+      const oldest = this.impacts.shift();
+      if (oldest) {
+        this.releaseImpact(oldest.graphic);
+      }
+    }
+
+    const graphic = this.acquireImpact();
+    graphic.clear();
+    graphic.circle(0, 0, 4).fill({ color: 0xffe08a, alpha: 0.85 });
+    graphic.position.set(x, y);
+    graphic.alpha = 1;
+    this.view.addChild(graphic);
+    this.impacts.push({ age: 0, graphic });
   }
 
   private spawnBurst(x: number, y: number, kind: 'air' | 'ground', scale: number): void {
@@ -278,19 +309,68 @@ export class DefenseSystem {
     if (frames.length === 0) {
       return;
     }
+    while (this.bursts.length >= MAX_BURSTS) {
+      const oldest = this.bursts.shift();
+      oldest?.sprite.destroy();
+    }
     const sprite = new Sprite(frames[0]);
     sprite.anchor.set(0.5);
     sprite.scale.set(scale);
     sprite.blendMode = 'add';
     sprite.position.set(x, y);
     this.view.addChild(sprite);
-    this.bursts.push({ x, y, age: 0, frames, sprite, scale });
+    this.bursts.push({ age: 0, frames, sprite });
   }
 
-  private drawGun(): void {
+  private acquireShot(weapon: WeaponId, color: number): Graphics {
+    const graphic = this.shotPool.pop() ?? new Graphics();
+    graphic.clear();
+    graphic.visible = true;
+    graphic.alpha = 1;
+    if (weapon === 'artillery') {
+      graphic.rect(-1, -7, 2, 14).fill({ color: 0xffe08a });
+    } else if (weapon === 'missile') {
+      graphic.roundRect(-2.5, -9, 5, 18, 1.5).fill({ color });
+    } else {
+      graphic.rect(-1.5, -6, 3, 12).fill({ color });
+      graphic.circle(0, 0, 2.5).fill({ color: 0xd0ecff, alpha: 0.85 });
+    }
+    return graphic;
+  }
+
+  private releaseShot(graphic: Graphics): void {
+    graphic.removeFromParent();
+    graphic.visible = false;
+    if (this.shotPool.length < 48) {
+      this.shotPool.push(graphic);
+    } else {
+      graphic.destroy();
+    }
+  }
+
+  private acquireImpact(): Graphics {
+    return this.impactPool.pop() ?? new Graphics();
+  }
+
+  private releaseImpact(graphic: Graphics): void {
+    graphic.removeFromParent();
+    graphic.clear();
+    if (this.impactPool.length < 24) {
+      this.impactPool.push(graphic);
+    } else {
+      graphic.destroy();
+    }
+  }
+
+  private drawGun(force = false): void {
+    const key = `${this.gunX.toFixed(1)}:${this.gunY.toFixed(1)}:${this.aim.toFixed(2)}:${this.selected}:${this.overheated}`;
+    if (!force && key === this.lastGunKey) {
+      return;
+    }
+    this.lastGunKey = key;
+
     this.gun.clear();
     this.gun.position.set(this.gunX, this.gunY);
-
     this.gun.roundRect(-16, -6, 32, 14, 4).fill({ color: 0x2a3238 });
     this.gun.roundRect(-12, -10, 24, 8, 3).fill({ color: 0x3d4a52 });
 

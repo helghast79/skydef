@@ -37,6 +37,7 @@ export class InfoBar {
   private bar = { x: 0, y: 0, width: 0, height: 0 };
   private iconsReady = false;
   private lastHud = '';
+  private lastMeter = '';
 
   constructor() {
     this.view.addChild(
@@ -62,6 +63,7 @@ export class InfoBar {
 
   resize(width: number, height: number): void {
     this.lastHud = '';
+    this.lastMeter = '';
     const barHeight = theme.layout.infoBarHeight;
     const y = height - barHeight;
     this.bar = { x: 0, y, width, height: barHeight };
@@ -113,12 +115,28 @@ export class InfoBar {
   }): void {
     const ownedKey = state.owned.join(',');
     const ammoKey = state.owned.map((id) => `${id}:${state.ammo[id]}`).join('|');
-    const signature = `${state.selected}:${ownedKey}:${ammoKey}:${state.heat.toFixed(0)}:${state.overheated}:${state.score}:${state.health}:${this.iconsReady}`;
-    if (signature === this.lastHud) {
-      return;
-    }
-    this.lastHud = signature;
+    const heatBucket = Math.round(state.heat / 2);
+    const layoutKey = `${state.selected}:${ownedKey}:${ammoKey}:${state.score}:${Math.round(state.health)}:${this.iconsReady}`;
+    const meterKey = `${layoutKey}:${heatBucket}:${state.overheated}`;
 
+    if (layoutKey !== this.lastHud) {
+      this.lastHud = layoutKey;
+      this.drawLayout(state);
+    }
+
+    if (meterKey !== this.lastMeter) {
+      this.lastMeter = meterKey;
+      this.drawMeter(state);
+    }
+  }
+
+  private drawLayout(state: {
+    selected: WeaponId;
+    owned: WeaponId[];
+    ammo: Record<WeaponId, number>;
+    score: number;
+    health: number;
+  }): void {
     this.scoreText.text = `SCORE  ${state.score}`;
     this.healthText.text = `CITY  ${Math.max(0, Math.round(state.health))}%`;
 
@@ -182,7 +200,14 @@ export class InfoBar {
         icon.visible = false;
       }
     }
+  }
 
+  private drawMeter(state: {
+    selected: WeaponId;
+    ammo: Record<WeaponId, number>;
+    heat: number;
+    overheated: boolean;
+  }): void {
     this.meterGfx.clear();
     const meterW = 160;
     const meterH = 10;

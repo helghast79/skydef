@@ -186,7 +186,7 @@ export class GameScene implements Scene {
       if (!drop.done) {
         return true;
       }
-      drop.view.destroy();
+      drop.view.destroy({ children: true });
       return false;
     });
 
@@ -200,7 +200,7 @@ export class GameScene implements Scene {
       if (!threat.done) {
         return true;
       }
-      threat.view.destroy();
+      threat.view.destroy({ children: true });
       return false;
     });
 
@@ -307,7 +307,7 @@ export class GameScene implements Scene {
 
   private clearThreats(): void {
     for (const threat of this.threats) {
-      threat.view.destroy();
+      threat.view.destroy({ children: true });
     }
     this.threats = [];
     this.threatLayer.removeChildren();
@@ -315,7 +315,7 @@ export class GameScene implements Scene {
 
   private clearDrops(): void {
     for (const drop of this.drops) {
-      drop.view.destroy();
+      drop.view.destroy({ children: true });
     }
     this.drops = [];
     this.dropLayer.removeChildren();
